@@ -1,0 +1,2225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant & Warehouse Stock Transfer System</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SheetJS (xlsx) for Excel Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- jsPDF & AutoTable for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Print Styles for Delivery Challan */
+        @media print {
+            body * { visibility: hidden !important; }
+            #printable-challan, #printable-challan * { visibility: visible !important; }
+            #printable-challan {
+                position: fixed !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 16px !important;
+                box-shadow: none !important;
+                border: none !important;
+                background: white !important;
+            }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Custom Modal Container -->
+    <div id="custom-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-fade-in">
+            <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                <h3 id="modal-title" class="text-lg font-bold text-slate-900">Modal Title</h3>
+                <button onclick="closeModal()" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div id="modal-body" class="p-6 text-sm text-slate-600 max-h-[75vh] overflow-y-auto"></div>
+            <div id="modal-footer" class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+                <button onclick="closeModal()" class="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium rounded-xl text-sm transition">Cancel</button>
+                <button id="modal-confirm-btn" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md transition">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== LOGIN SCREEN ==================== -->
+    <div id="login-view" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 border border-slate-100">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-600/30">
+                    <i data-lucide="warehouse" class="w-8 h-8"></i>
+                </div>
+                <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Stock Transfer Portal</h1>
+                <p class="text-sm text-slate-500 mt-1">Restaurant to Factory & Warehouse Order System</p>
+            </div>
+
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Username</label>
+                    <div class="relative">
+                        <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5"></i>
+                        <input type="text" id="login-username" value="branch1" placeholder="Enter username" required class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Password</label>
+                    <div class="relative">
+                        <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5"></i>
+                        <input type="password" id="login-password" value="1234" placeholder="Enter password" required class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition">
+                    </div>
+                </div>
+                <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2">
+                    <span>Sign In to Portal</span>
+                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </button>
+            </form>
+
+            <!-- Demo Credentials Helper -->
+            <div class="mt-6 p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs text-slate-600 space-y-1.5">
+                <div class="font-bold text-slate-800 flex items-center gap-1.5">
+                    <i data-lucide="info" class="w-3.5 h-3.5 text-blue-600"></i> Quick Login Credentials (Password: <span class="font-mono text-blue-600">1234</span>)
+                </div>
+                <div class="grid grid-cols-2 gap-1 pt-1">
+                    <button type="button" onclick="quickFillLogin('branch1')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">branch1</span> (Gulshan)</button>
+                    <button type="button" onclick="quickFillLogin('branch2')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">branch2</span> (Banani)</button>
+                    <button type="button" onclick="quickFillLogin('branch3')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">branch3</span> (Dhanmondi)</button>
+                    <button type="button" onclick="quickFillLogin('factory')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">factory</span> (Factory)</button>
+                    <button type="button" onclick="quickFillLogin('warehouse')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">warehouse</span> (Warehouse)</button>
+                    <button type="button" onclick="quickFillLogin('admin')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">admin</span> (Full Admin)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MAIN APPLICATION SHELL ==================== -->
+    <div id="app-view" class="hidden min-h-screen flex flex-col lg:flex-row">
+        
+        <!-- Sidebar Navigation -->
+        <aside id="sidebar" class="no-print w-full lg:w-72 bg-slate-900 text-slate-300 flex flex-col shrink-0 transition-all">
+            <div class="p-6 border-b border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-md">
+                        <i data-lucide="boxes" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <div class="font-bold text-white text-base leading-tight">StockTransfer</div>
+                        <div class="text-[11px] text-slate-400 font-medium">Supply Chain ERP</div>
+                    </div>
+                </div>
+                <button id="mobile-menu-toggle" class="lg:hidden p-2 text-slate-400 hover:text-white rounded-lg">
+                    <i data-lucide="menu" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Navigation Menu Items -->
+            <nav id="sidebar-nav" class="flex-1 p-4 space-y-1.5 overflow-y-auto"></nav>
+
+            <!-- Database Status & User Card -->
+            <div class="p-4 border-t border-slate-800 space-y-3">
+                <div id="db-status-btn" class="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700/80 text-xs">
+                    <span class="flex items-center gap-2 min-w-0">
+                        <span id="db-status-dot" class="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                        <span id="db-status-text" class="font-medium text-slate-200 truncate">Connecting kty-store-order...</span>
+                    </span>
+                    <button onclick="resetDemoData()" title="Re-seed Default Data to Firestore" class="p-1 text-slate-400 hover:text-white rounded transition shrink-0">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+
+                <div class="bg-slate-800/60 rounded-xl p-3 flex items-center justify-between">
+                    <div class="min-w-0">
+                        <div id="user-display-name" class="text-sm font-bold text-white truncate">User Name</div>
+                        <div id="user-display-role" class="text-[11px] text-blue-400 font-semibold uppercase tracking-wider truncate">Role</div>
+                    </div>
+                    <button onclick="logout()" title="Logout" class="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-700/50 rounded-lg transition">
+                        <i data-lucide="log-out" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace Content -->
+        <main class="flex-1 flex flex-col min-w-0">
+            <!-- Top Header Bar -->
+            <header class="no-print bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-20">
+                <div>
+                    <h2 id="page-title" class="text-xl font-bold text-slate-900">Dashboard</h2>
+                    <p id="page-subtitle" class="text-xs text-slate-500">Manage stock transfer requests and warehouse dispatches</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span id="header-branch-pill" class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-bold flex items-center gap-1.5">
+                        <i data-lucide="store" class="w-3.5 h-3.5"></i>
+                        <span>Branch</span>
+                    </span>
+                </div>
+            </header>
+
+            <!-- Dynamic View Container -->
+            <div id="main-content" class="flex-1 p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden"></div>
+        </main>
+    </div>
+
+    <!-- ==================== APPLICATION LOGIC & HYBRID DB ==================== -->
+    <script type="module">
+        // Import Firebase SDK v11 Modular functions via CDN
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
+        import {
+            getFirestore,
+            collection,
+            doc,
+            setDoc,
+            getDocs,
+            deleteDoc,
+            onSnapshot,
+            writeBatch
+        } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+        // Your web app's Firebase configuration (kty-store-order)
+        const firebaseConfig = {
+            apiKey: "AIzaSyARVhYpatrpllPch6XJPKumXhJVvCUAzIA",
+            authDomain: "kty-store-order.firebaseapp.com",
+            projectId: "kty-store-order",
+            storageBucket: "kty-store-order.firebasestorage.app",
+            messagingSenderId: "340295086859",
+            appId: "1:340295086859:web:737eab78ed9a9c1aab280e",
+            measurementId: "G-C9VKBLLLM3"
+        };
+
+        // Initialize Firebase App & Analytics
+        const firebaseApp = initializeApp(firebaseConfig);
+        let analytics = null;
+        try {
+            analytics = getAnalytics(firebaseApp);
+        } catch (e) {
+            console.warn("Analytics skipped in sandboxed/local preview:", e.message);
+        }
+        const firestoreDb = getFirestore(firebaseApp);
+
+        // ------------------------------------------------------------
+        // 1. DEFAULT SEED DATA (Auto-seeded to Firestore on first run)
+        // ------------------------------------------------------------
+        const TODAY = new Date().toISOString().split('T')[0];
+        const TOMORROW = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+        const DEFAULT_DATA = {
+            branches: [
+                { id: 'BR-01', name: 'Branch 1 - Gulshan', code: 'GUL', address: 'House 42, Road 11, Gulshan-1' },
+                { id: 'BR-02', name: 'Branch 2 - Banani', code: 'BAN', address: 'Plot 18, Block E, Banani' },
+                { id: 'BR-03', name: 'Branch 3 - Dhanmondi', code: 'DHA', address: 'Road 27, Dhanmondi' }
+            ],
+            destinations: [
+                { id: 'DST-01', name: 'Factory', type: 'Factory' },
+                { id: 'DST-02', name: 'Warehouse', type: 'Warehouse' },
+                { id: 'DST-03', name: 'Frozen Warehouse', type: 'Frozen Warehouse' }
+            ],
+            categories: [
+                { id: 'CAT-01', name: 'Bakery & Pastry' },
+                { id: 'CAT-02', name: 'Frozen Meat & Poultry' },
+                { id: 'CAT-03', name: 'Sauces & Marinades' },
+                { id: 'CAT-04', name: 'Dry Grocery & Packaging' }
+            ],
+            items: [
+                { id: 'ITM-01', code: 'BAK-101', name: 'Artisan Burger Buns (Pack of 12)', unit: 'PACK', categoryId: 'CAT-01' },
+                { id: 'ITM-02', code: 'BAK-102', name: 'Butter Croissant Dough', unit: 'PCS', categoryId: 'CAT-01' },
+                { id: 'ITM-03', code: 'BAK-103', name: 'Focaccia Loaf 500g', unit: 'PCS', categoryId: 'CAT-01' },
+                { id: 'ITM-04', code: 'BAK-104', name: 'Chocolate Fudge Brownie Tray', unit: 'TRAY', categoryId: 'CAT-01' },
+
+                { id: 'ITM-05', code: 'FRZ-201', name: 'Marinated Chicken Breast Fillet', unit: 'KG', categoryId: 'CAT-02' },
+                { id: 'ITM-06', code: 'FRZ-202', name: 'Premium Beef Burger Patties', unit: 'KG', categoryId: 'CAT-02' },
+                { id: 'ITM-07', code: 'FRZ-203', name: 'Crispy French Fries 2.5kg', unit: 'BAG', categoryId: 'CAT-02' },
+                { id: 'ITM-08', code: 'FRZ-204', name: 'Breaded Chicken Tenders', unit: 'KG', categoryId: 'CAT-02' },
+
+                { id: 'ITM-09', code: 'SAU-301', name: 'Signature House Burger Sauce', unit: 'LTR', categoryId: 'CAT-03' },
+                { id: 'ITM-10', code: 'SAU-302', name: 'Spicy Peri-Peri Marinade', unit: 'LTR', categoryId: 'CAT-03' },
+                { id: 'ITM-11', code: 'SAU-303', name: 'Classic Garlic Aioli', unit: 'KG', categoryId: 'CAT-03' },
+                { id: 'ITM-12', code: 'SAU-304', name: 'Smoky BBQ Glaze', unit: 'LTR', categoryId: 'CAT-03' },
+
+                { id: 'ITM-13', code: 'DRY-401', name: 'Takeaway Kraft Meal Box', unit: 'PCS', categoryId: 'CAT-04' },
+                { id: 'ITM-14', code: 'DRY-402', name: 'Branded Paper Napkins (500s)', unit: 'PACK', categoryId: 'CAT-04' },
+                { id: 'ITM-15', code: 'DRY-403', name: 'Extra Virgin Olive Oil', unit: 'LTR', categoryId: 'CAT-04' },
+                { id: 'ITM-16', code: 'DRY-404', name: 'Sea Salt Flakes', unit: 'KG', categoryId: 'CAT-04' }
+            ],
+            users: [
+                { id: 'USR-01', username: 'admin', password: '1234', fullName: 'System Administrator', role: 'admin', branchId: '', destinationId: '' },
+                { id: 'USR-02', username: 'factory', password: '1234', fullName: 'Factory Production Head', role: 'factory_warehouse', branchId: '', destinationId: 'DST-01' },
+                { id: 'USR-03', username: 'warehouse', password: '1234', fullName: 'Warehouse Storekeeper', role: 'factory_warehouse', branchId: '', destinationId: 'DST-02' },
+                { id: 'USR-04', username: 'branch1', password: '1234', fullName: 'Gulshan Branch Manager', role: 'branch', branchId: 'BR-01', destinationId: '' },
+                { id: 'USR-05', username: 'branch2', password: '1234', fullName: 'Banani Branch Manager', role: 'branch', branchId: 'BR-02', destinationId: '' },
+                { id: 'USR-06', username: 'branch3', password: '1234', fullName: 'Dhanmondi Branch Manager', role: 'branch', branchId: 'BR-03', destinationId: '' }
+            ],
+            orders: [
+                {
+                    id: 'ORD-SEED-1',
+                    branchId: 'BR-01',
+                    branchName: 'Branch 1 - Gulshan',
+                    destinationId: 'DST-01',
+                    destinationName: 'Factory',
+                    requestDate: TODAY,
+                    deliveryDate: TOMORROW,
+                    status: 'Submitted',
+                    quantities: { 'ITM-01': 15, 'ITM-02': 40, 'ITM-03': 10, 'ITM-09': 12, 'ITM-10': 8 },
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'ORD-SEED-2',
+                    branchId: 'BR-02',
+                    branchName: 'Branch 2 - Banani',
+                    destinationId: 'DST-01',
+                    destinationName: 'Factory',
+                    requestDate: TODAY,
+                    deliveryDate: TOMORROW,
+                    status: 'Submitted',
+                    quantities: { 'ITM-01': 20, 'ITM-02': 30, 'ITM-04': 5, 'ITM-09': 15, 'ITM-11': 10 },
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'ORD-SEED-3',
+                    branchId: 'BR-03',
+                    branchName: 'Branch 3 - Dhanmondi',
+                    destinationId: 'DST-03',
+                    destinationName: 'Frozen Warehouse',
+                    requestDate: TODAY,
+                    deliveryDate: TOMORROW,
+                    status: 'Submitted',
+                    quantities: { 'ITM-05': 25, 'ITM-06': 30, 'ITM-07': 18, 'ITM-08': 12 },
+                    updatedAt: new Date().toISOString()
+                }
+            ]
+        };
+
+        // ------------------------------------------------------------
+        // 2. CLOUD FIRESTORE DATABASE ENGINE (Project: kty-store-order)
+        // ------------------------------------------------------------
+        const STORAGE_KEY = 'kty_store_order_cache_v1';
+
+        let state = {
+            branches: [],
+            destinations: [],
+            categories: [],
+            items: [],
+            users: [],
+            orders: []
+        };
+
+        let isCloudActive = false;
+
+        function loadFromLocalStorage() {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) {
+                state = JSON.parse(JSON.stringify(DEFAULT_DATA));
+                saveToLocalStorage();
+            } else {
+                try {
+                    const parsed = JSON.parse(raw);
+                    state = {
+                        branches: parsed.branches || DEFAULT_DATA.branches,
+                        destinations: parsed.destinations || DEFAULT_DATA.destinations,
+                        categories: parsed.categories || DEFAULT_DATA.categories,
+                        items: parsed.items || DEFAULT_DATA.items,
+                        users: parsed.users || DEFAULT_DATA.users,
+                        orders: parsed.orders || []
+                    };
+                } catch (e) {
+                    state = JSON.parse(JSON.stringify(DEFAULT_DATA));
+                    saveToLocalStorage();
+                }
+            }
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+
+        function updateDbStatusBadge(cloudConnected) {
+            isCloudActive = cloudConnected;
+            const dot = document.getElementById('db-status-dot');
+            const text = document.getElementById('db-status-text');
+            if (!dot || !text) return;
+            if (cloudConnected) {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0';
+                text.textContent = 'Firestore: kty-store-order';
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-amber-400 shrink-0';
+                text.textContent = 'Offline Cache Mode';
+            }
+        }
+
+        async function seedCollectionIfEmpty(colName) {
+            const colRef = collection(firestoreDb, colName);
+            const snap = await getDocs(colRef);
+            if (snap.empty && DEFAULT_DATA[colName]?.length > 0) {
+                const batch = writeBatch(firestoreDb);
+                DEFAULT_DATA[colName].forEach(record => {
+                    batch.set(doc(firestoreDb, colName, record.id), record);
+                });
+                await batch.commit();
+            }
+        }
+
+        async function initHybridDatabase() {
+            loadFromLocalStorage();
+
+            const collections = ['branches', 'destinations', 'categories', 'items', 'users', 'orders'];
+            try {
+                // Ensure initial master data & demo users exist in Cloud Firestore
+                await Promise.all(collections.map(colName => seedCollectionIfEmpty(colName)));
+
+                // Attach real-time Firestore listeners to all collections
+                collections.forEach(colName => {
+                    const colRef = collection(firestoreDb, colName);
+                    onSnapshot(colRef, (snapshot) => {
+                        updateDbStatusBadge(true);
+                        state[colName] = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                        saveToLocalStorage();
+                        if (currentUser) renderCurrentRoute();
+                    }, (err) => {
+                        console.error(`Firestore listener error (${colName}):`, err);
+                        updateDbStatusBadge(false);
+                    });
+                });
+            } catch (err) {
+                console.warn('Cloud Firestore connection fallback (check Firestore Security Rules):', err);
+                updateDbStatusBadge(false);
+            }
+        }
+
+        async function dbSaveRecord(colName, record) {
+            const idx = state[colName].findIndex(r => r.id === record.id);
+            if (idx >= 0) state[colName][idx] = record;
+            else state[colName].push(record);
+            saveToLocalStorage();
+
+            try {
+                await setDoc(doc(firestoreDb, colName, record.id), record);
+                updateDbStatusBadge(true);
+            } catch (e) {
+                console.error('Firestore save error:', e);
+                showToast('Saved locally. Check Firestore rules if cloud sync is blocked.', 'warning');
+            }
+        }
+
+        async function dbDeleteRecord(colName, id) {
+            state[colName] = state[colName].filter(r => r.id !== id);
+            saveToLocalStorage();
+
+            try {
+                await deleteDoc(doc(firestoreDb, colName, id));
+                updateDbStatusBadge(true);
+            } catch (e) {
+                console.error('Firestore delete error:', e);
+            }
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+
+        function updateDbStatusBadge(cloudConnected) {
+            isCloudActive = cloudConnected;
+            const dot = document.getElementById('db-status-dot');
+            const text = document.getElementById('db-status-text');
+            if (!dot || !text) return;
+            if (cloudConnected) {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+                text.textContent = 'Cloud Firestore Synced';
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+                text.textContent = 'Local Storage Mode';
+            }
+        }
+
+        async function initHybridDatabase() {
+            loadFromLocalStorage();
+
+            let fbConfig = null;
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                try { fbConfig = JSON.parse(__firebase_config); } catch (e) {}
+            }
+            if (!fbConfig) {
+                const savedCfg = localStorage.getItem(FB_CONFIG_KEY);
+                if (savedCfg) {
+                    try { fbConfig = JSON.parse(savedCfg); } catch (e) {}
+                }
+            }
+
+            if (fbConfig && fbConfig.apiKey && fbConfig.projectId) {
+                try {
+                    const app = initializeApp(fbConfig);
+                    const auth = getAuth(app);
+                    firestoreDb = getFirestore(app);
+
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+
+                    const collections = ['branches', 'destinations', 'categories', 'items', 'users', 'orders'];
+                    collections.forEach(colName => {
+                        const colRef = collection(firestoreDb, 'artifacts', appId, 'public', 'data', colName);
+                        onSnapshot(colRef, async (snapshot) => {
+                            updateDbStatusBadge(true);
+                            if (snapshot.empty) {
+                                // Seed initial records to Firestore
+                                for (const item of state[colName]) {
+                                    await setDoc(doc(firestoreDb, 'artifacts', appId, 'public', 'data', colName, item.id), item);
+                                }
+                            } else {
+                                state[colName] = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                                saveToLocalStorage();
+                                if (currentUser) renderCurrentRoute();
+                            }
+                        }, (err) => {
+                            console.warn('Firestore listener fallback:', err);
+                            updateDbStatusBadge(false);
+                        });
+                    });
+                } catch (err) {
+                    console.warn('Firebase init failed, using LocalStorage:', err);
+                    updateDbStatusBadge(false);
+                }
+            } else {
+                updateDbStatusBadge(false);
+            }
+        }
+
+        async function dbSaveRecord(colName, record) {
+            const idx = state[colName].findIndex(r => r.id === record.id);
+            if (idx >= 0) state[colName][idx] = record;
+            else state[colName].push(record);
+            saveToLocalStorage();
+
+            if (isCloudActive && firestoreDb) {
+                try {
+                    await setDoc(doc(firestoreDb, 'artifacts', appId, 'public', 'data', colName, record.id), record);
+                } catch (e) {
+                    console.error('Cloud write error:', e);
+                }
+            }
+        }
+
+        async function dbDeleteRecord(colName, id) {
+            state[colName] = state[colName].filter(r => r.id !== id);
+            saveToLocalStorage();
+
+            if (isCloudActive && firestoreDb) {
+                try {
+                    await deleteDoc(doc(firestoreDb, 'artifacts', appId, 'public', 'data', colName, id));
+                } catch (e) {
+                    console.error('Cloud delete error:', e);
+                }
+            }
+        }
+
+        // ------------------------------------------------------------
+        // 3. UI HELPERS (Toast & Modal)
+        // ------------------------------------------------------------
+        window.showToast = function(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const styles = {
+                success: 'bg-emerald-600 text-white border-emerald-500',
+                error: 'bg-rose-600 text-white border-rose-500',
+                info: 'bg-slate-800 text-white border-slate-700',
+                warning: 'bg-amber-600 text-white border-amber-500'
+            };
+            const icons = {
+                success: 'check-circle-2',
+                error: 'alert-circle',
+                info: 'info',
+                warning: 'alert-triangle'
+            };
+            toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl border text-sm font-medium transition-all duration-300 transform translate-y-2 opacity-0 ${styles[type] || styles.info}`;
+            toast.innerHTML = `<i data-lucide="${icons[type] || 'info'}" class="w-4 h-4 shrink-0"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3200);
+        };
+
+        let activeModalConfirm = null;
+        window.openModal = function({ title, bodyHtml, confirmText = 'Save', showFooter = true, onConfirm = null }) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-body').innerHTML = bodyHtml;
+            const footer = document.getElementById('modal-footer');
+            const confirmBtn = document.getElementById('modal-confirm-btn');
+            if (showFooter) {
+                footer.classList.remove('hidden');
+                confirmBtn.textContent = confirmText;
+                activeModalConfirm = onConfirm;
+            } else {
+                footer.classList.add('hidden');
+                activeModalConfirm = null;
+            }
+            document.getElementById('custom-modal').classList.remove('hidden');
+            lucide.createIcons();
+        };
+
+        window.closeModal = function() {
+            document.getElementById('custom-modal').classList.add('hidden');
+            activeModalConfirm = null;
+        };
+
+        document.getElementById('modal-confirm-btn').addEventListener('click', async () => {
+            if (activeModalConfirm) {
+                await activeModalConfirm();
+            }
+        });
+
+        window.resetDemoData = async function() {
+            openModal({
+                title: 'Re-Seed Default Master Data to Firestore',
+                confirmText: 'Seed Data Now',
+                bodyHtml: `
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        This will restore default branches, destinations (<strong>Factory</strong>, <strong>Warehouse</strong>, <strong>Frozen Warehouse</strong>), categories, items, and user accounts into your <strong>kty-store-order</strong> Cloud Firestore database.
+                    </p>
+                `,
+                onConfirm: async () => {
+                    try {
+                        const collections = ['branches', 'destinations', 'categories', 'items', 'users', 'orders'];
+                        for (const colName of collections) {
+                            const batch = writeBatch(firestoreDb);
+                            DEFAULT_DATA[colName].forEach(rec => {
+                                batch.set(doc(firestoreDb, colName, rec.id), rec);
+                            });
+                            await batch.commit();
+                        }
+                        closeModal();
+                        showToast('Default master data synced to kty-store-order Firestore!', 'success');
+                    } catch (e) {
+                        closeModal();
+                        showToast('Firestore write error: ' + e.message, 'error');
+                    }
+                }
+            });
+        };
+
+        // ------------------------------------------------------------
+        // 4. AUTHENTICATION & NAVIGATION
+        // ------------------------------------------------------------
+        let currentUser = null;
+        let currentRoute = 'order-form';
+
+        window.quickFillLogin = function(username) {
+            document.getElementById('login-username').value = username;
+            document.getElementById('login-password').value = '1234';
+        };
+
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const uname = document.getElementById('login-username').value.trim().toLowerCase();
+            const pwd = document.getElementById('login-password').value.trim();
+
+            const user = state.users.find(u => u.username.toLowerCase() === uname && u.password === pwd);
+            if (!user) {
+                showToast('Invalid username or password!', 'error');
+                return;
+            }
+
+            currentUser = { ...user };
+            document.getElementById('login-view').classList.add('hidden');
+            document.getElementById('app-view').classList.remove('hidden');
+
+            document.getElementById('user-display-name').textContent = currentUser.fullName;
+            document.getElementById('user-display-role').textContent = currentUser.role.replace('_', ' ');
+
+            const branchObj = state.branches.find(b => b.id === currentUser.branchId);
+            const destObj = state.destinations.find(d => d.id === currentUser.destinationId);
+            const headerPill = document.getElementById('header-branch-pill');
+
+            if (currentUser.role === 'branch' && branchObj) {
+                headerPill.innerHTML = `<i data-lucide="store" class="w-3.5 h-3.5"></i><span>${branchObj.name}</span>`;
+                currentRoute = 'order-form';
+            } else if (currentUser.role === 'factory_warehouse') {
+                headerPill.innerHTML = `<i data-lucide="factory" class="w-3.5 h-3.5"></i><span>${destObj ? destObj.name : 'Factory & Warehouse'}</span>`;
+                currentRoute = 'order-matrix';
+            } else {
+                headerPill.innerHTML = `<i data-lucide="shield-check" class="w-3.5 h-3.5"></i><span>System Administrator</span>`;
+                currentRoute = 'order-form';
+            }
+
+            resetOrderSessionState();
+            renderSidebarMenu();
+            renderCurrentRoute();
+            showToast(`Welcome back, ${currentUser.fullName}!`, 'success');
+        });
+
+        window.logout = function() {
+            currentUser = null;
+            document.getElementById('app-view').classList.add('hidden');
+            document.getElementById('login-view').classList.remove('hidden');
+            showToast('Logged out safely.', 'info');
+        };
+
+        document.getElementById('mobile-menu-toggle').addEventListener('click', () => {
+            const nav = document.getElementById('sidebar-nav');
+            nav.classList.toggle('hidden');
+        });
+
+        function renderSidebarMenu() {
+            const nav = document.getElementById('sidebar-nav');
+            let items = [];
+
+            if (currentUser.role === 'branch') {
+                items = [
+                    { id: 'order-form', label: 'Stock Transfer Order Form', icon: 'clipboard-edit' },
+                    { id: 'my-orders', label: 'My Branch Order History', icon: 'history' },
+                    { id: 'delivery-challan', label: 'Delivery Slip & Print', icon: 'printer' }
+                ];
+            } else if (currentUser.role === 'factory_warehouse') {
+                items = [
+                    { id: 'order-matrix', label: 'Consolidated Order Matrix', icon: 'table-2' },
+                    { id: 'delivery-challan', label: 'Branch Delivery Challan', icon: 'printer' },
+                    { id: 'master-items', label: 'Categories & Items', icon: 'package' }
+                ];
+            } else {
+                // Admin sees everything
+                items = [
+                    { id: 'order-form', label: 'Stock Transfer Order Form', icon: 'clipboard-edit' },
+                    { id: 'order-matrix', label: 'Factory / WH Order Matrix', icon: 'table-2' },
+                    { id: 'delivery-challan', label: 'Branch Delivery Challan', icon: 'printer' },
+                    { id: 'master-items', label: 'Categories & Item Master', icon: 'package' },
+                    { id: 'master-locations', label: 'Branches & Warehouses', icon: 'building-2' },
+                    { id: 'master-users', label: 'Users & Access Control', icon: 'users' }
+                ];
+            }
+
+            nav.innerHTML = items.map(item => {
+                const active = currentRoute === item.id;
+                return `
+                    <button onclick="navigateTo('${item.id}')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
+                        <i data-lucide="${item.icon}" class="w-4 h-4 shrink-0"></i>
+                        <span class="truncate">${item.label}</span>
+                    </button>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        window.navigateTo = function(routeId) {
+            currentRoute = routeId;
+            renderSidebarMenu();
+            renderCurrentRoute();
+        };
+
+        function renderCurrentRoute() {
+            const container = document.getElementById('main-content');
+            const titleEl = document.getElementById('page-title');
+            const subEl = document.getElementById('page-subtitle');
+
+            if (currentRoute === 'order-form') {
+                titleEl.textContent = 'Stock Transfer Order Request Form';
+                subEl.textContent = 'Click Add to activate form, select Category, enter quantities, and Save';
+                renderOrderFormView(container);
+            } else if (currentRoute === 'my-orders') {
+                titleEl.textContent = 'Branch Order History';
+                subEl.textContent = 'Review submitted or suspended stock requests and load them into the form to modify';
+                renderBranchHistoryView(container);
+            } else if (currentRoute === 'order-matrix') {
+                titleEl.textContent = 'Factory & Warehouse Consolidated Order Matrix';
+                subEl.textContent = 'Double-click any branch cell to modify quantities, then click Save Changes';
+                renderOrderMatrixView(container);
+            } else if (currentRoute === 'delivery-challan') {
+                titleEl.textContent = 'Branch-Wise Delivery Form & Challan Print';
+                subEl.textContent = 'Select Branch and Category to generate printable dispatch paper, Excel, or PDF';
+                renderDeliveryChallanView(container);
+            } else if (currentRoute === 'master-items') {
+                titleEl.textContent = 'Item Categories & Item Master';
+                subEl.textContent = 'Add, edit, or delete item categories, item codes, names, and units';
+                renderMasterItemsView(container);
+            } else if (currentRoute === 'master-locations') {
+                titleEl.textContent = 'Branches & Destinations (Factory / Warehouse)';
+                subEl.textContent = 'Manage restaurant branches and supply destinations';
+                renderMasterLocationsView(container);
+            } else if (currentRoute === 'master-users') {
+                titleEl.textContent = 'Users & Branch Access Control';
+                subEl.textContent = 'Manage login credentials, passwords, roles, and branch assignments';
+                renderMasterUsersView(container);
+            }
+            lucide.createIcons();
+        }
+
+        // ------------------------------------------------------------
+        // 5. STOCK TRANSFER ORDER REQUEST FORM (Add, Modify, Suspend, Save)
+        // ------------------------------------------------------------
+        let orderFormState = {
+            isActive: false,
+            editingOrderId: null,
+            statusLabel: 'Locked',
+            branchId: '',
+            destinationId: '',
+            requestDate: TODAY,
+            deliveryDate: TOMORROW,
+            selectedCategoryIndex: 0,
+            quantities: {} // itemId -> numeric qty
+        };
+
+        function resetOrderSessionState() {
+            const defaultBranchId = currentUser?.role === 'branch' && currentUser.branchId
+                ? currentUser.branchId
+                : (state.branches[0]?.id || '');
+            const defaultDestId = state.destinations[0]?.id || '';
+
+            orderFormState = {
+                isActive: false,
+                editingOrderId: null,
+                statusLabel: 'Locked (Click Add)',
+                branchId: defaultBranchId,
+                destinationId: defaultDestId,
+                requestDate: TODAY,
+                deliveryDate: TOMORROW,
+                selectedCategoryIndex: 0,
+                quantities: {}
+            };
+        }
+
+        function renderOrderFormView(container) {
+            const branches = state.branches;
+            const destinations = state.destinations;
+            const categories = state.categories;
+
+            if (!orderFormState.branchId && branches.length > 0) {
+                orderFormState.branchId = currentUser.branchId || branches[0].id;
+            }
+            if (!orderFormState.destinationId && destinations.length > 0) {
+                orderFormState.destinationId = destinations[0].id;
+            }
+            if (orderFormState.selectedCategoryIndex >= categories.length) {
+                orderFormState.selectedCategoryIndex = 0;
+            }
+
+            const activeCategory = categories[orderFormState.selectedCategoryIndex];
+            const categoryItems = activeCategory
+                ? state.items.filter(i => i.categoryId === activeCategory.id)
+                : [];
+
+            const isBranchLockedToUser = currentUser.role === 'branch' && Boolean(currentUser.branchId);
+            const active = orderFormState.isActive;
+
+            // Calculate summary across all categories
+            let totalItemsEntered = 0;
+            let totalQtyEntered = 0;
+            Object.values(orderFormState.quantities).forEach(q => {
+                if (q > 0) {
+                    totalItemsEntered++;
+                    totalQtyEntered += Number(q);
+                }
+            });
+
+            const statusBadgeClass = active
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : (orderFormState.statusLabel.includes('Suspended')
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-slate-100 text-slate-600 border-slate-200');
+
+            container.innerHTML = `
+                <div class="max-w-6xl mx-auto space-y-6">
+                    <!-- Top Action Toolbar & Order Header -->
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                        <div class="flex flex-wrap items-center justify-between gap-4 pb-5 mb-6 border-b border-slate-100">
+                            <div class="flex items-center gap-3">
+                                <span class="px-3 py-1 rounded-full text-xs font-bold border ${statusBadgeClass}">
+                                    ${active ? '● Form Active (Ready for Entry)' : `○ ${orderFormState.statusLabel}`}
+                                </span>
+                                ${totalItemsEntered > 0 ? `<span class="px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">${totalItemsEntered} Items (${totalQtyEntered} Total Qty)</span>` : ''}
+                            </div>
+
+                            <!-- Action Buttons: Add, Modify, Suspend, Save -->
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button id="btn-order-add" type="button" class="px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-1.5 ${!active ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">
+                                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Add
+                                </button>
+                                <button id="btn-order-modify" type="button" class="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-sm font-semibold transition flex items-center gap-1.5">
+                                    <i data-lucide="edit-3" class="w-4 h-4"></i> Modify
+                                </button>
+                                <button id="btn-order-suspend" type="button" ${!active ? 'disabled' : ''} class="px-4 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700 rounded-xl text-sm font-semibold transition flex items-center gap-1.5">
+                                    <i data-lucide="pause-circle" class="w-4 h-4"></i> Suspend
+                                </button>
+                                <button id="btn-order-save" type="button" ${!active ? 'disabled' : ''} class="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-sm font-semibold shadow-md shadow-blue-600/20 transition flex items-center gap-1.5">
+                                    <i data-lucide="save" class="w-4 h-4"></i> Save
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- First Box: Branch Name, To Warehouse/Factory, Requested Date, Delivery Date -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">1. Requesting Branch</label>
+                                <select id="form-branch-select" ${(!active || isBranchLockedToUser) ? 'disabled' : ''} class="w-full px-3.5 py-2.5 bg-slate-50 disabled:bg-slate-100 disabled:text-slate-700 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 outline-none">
+                                    ${branches.map(b => `<option value="${b.id}" ${b.id === orderFormState.branchId ? 'selected' : ''}>${b.name}</option>`).join('')}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">2. To Factory / Warehouse</label>
+                                <select id="form-dest-select" ${!active ? 'disabled' : ''} class="w-full px-3.5 py-2.5 bg-slate-50 disabled:bg-slate-100 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 outline-none">
+                                    ${destinations.map(d => `<option value="${d.id}" ${d.id === orderFormState.destinationId ? 'selected' : ''}>${d.name}</option>`).join('')}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">3. Requested Date</label>
+                                <input type="date" id="form-req-date" ${!active ? 'disabled' : ''} value="${orderFormState.requestDate}" class="w-full px-3.5 py-2.5 bg-slate-50 disabled:bg-slate-100 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">4. Delivery Date</label>
+                                <input type="date" id="form-del-date" ${!active ? 'disabled' : ''} value="${orderFormState.deliveryDate}" class="w-full px-3.5 py-2.5 bg-slate-50 disabled:bg-slate-100 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category Dropdown + Previous / Next Navigation + Item Entry Table -->
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-5">
+                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <label class="text-xs font-bold uppercase tracking-wider text-slate-600">Select Category:</label>
+                                <select id="form-category-dropdown" class="px-4 py-2 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 outline-none min-w-[220px]">
+                                    ${categories.map((c, idx) => {
+                                        const catItemIds = state.items.filter(it => it.categoryId === c.id).map(it => it.id);
+                                        const filledCount = catItemIds.filter(id => (orderFormState.quantities[id] || 0) > 0).length;
+                                        return `<option value="${idx}" ${idx === orderFormState.selectedCategoryIndex ? 'selected' : ''}>${c.name}${filledCount > 0 ? ` (${filledCount} filled)` : ''}</option>`;
+                                    }).join('')}
+                                </select>
+                            </div>
+
+                            <!-- Previous & Next Buttons -->
+                            <div class="flex items-center gap-2">
+                                <button id="btn-cat-prev" type="button" ${orderFormState.selectedCategoryIndex === 0 ? 'disabled' : ''} class="px-4 py-2 bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-300 text-slate-700 font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
+                                    <i data-lucide="chevron-left" class="w-4 h-4"></i> Previous
+                                </button>
+                                <span class="text-xs font-bold text-slate-500 px-2">
+                                    ${categories.length > 0 ? `${orderFormState.selectedCategoryIndex + 1} / ${categories.length}` : '0 / 0'}
+                                </span>
+                                <button id="btn-cat-next" type="button" ${orderFormState.selectedCategoryIndex >= categories.length - 1 ? 'disabled' : ''} class="px-4 py-2 bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-300 text-slate-700 font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
+                                    Next <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Category Items Table -->
+                        <div class="overflow-x-auto rounded-xl border border-slate-200">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-100/80 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                                        <th class="py-3.5 px-4 w-16">SL</th>
+                                        <th class="py-3.5 px-4 w-36">Item Code</th>
+                                        <th class="py-3.5 px-4">Item Description / Name</th>
+                                        <th class="py-3.5 px-4 w-28">Unit</th>
+                                        <th class="py-3.5 px-4 w-44 text-right">Order Qty</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-sm">
+                                    ${categoryItems.length === 0 ? `
+                                        <tr><td colspan="5" class="py-10 text-center text-slate-400 font-medium">No items configured under this category.</td></tr>
+                                    ` : categoryItems.map((item, idx) => {
+                                        const val = orderFormState.quantities[item.id] || '';
+                                        return `
+                                            <tr class="hover:bg-blue-50/40 transition ${val > 0 ? 'bg-blue-50/20' : ''}">
+                                                <td class="py-3 px-4 text-slate-400 font-medium">${idx + 1}</td>
+                                                <td class="py-3 px-4 font-mono font-bold text-slate-700">${item.code}</td>
+                                                <td class="py-3 px-4 font-semibold text-slate-900">${item.name}</td>
+                                                <td class="py-3 px-4"><span class="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-md text-xs font-bold">${item.unit}</span></td>
+                                                <td class="py-3 px-4 text-right">
+                                                    <input type="number" min="0" step="any" data-item-id="${item.id}" ${!active ? 'disabled' : ''} value="${val}" placeholder="${active ? '0' : 'Locked'}" class="order-qty-field w-32 px-3 py-2 text-right bg-white disabled:bg-slate-100 disabled:text-slate-400 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none transition">
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Bind Header Field Listeners
+            document.getElementById('form-branch-select')?.addEventListener('change', e => {
+                orderFormState.branchId = e.target.value;
+            });
+            document.getElementById('form-dest-select')?.addEventListener('change', e => {
+                orderFormState.destinationId = e.target.value;
+            });
+            document.getElementById('form-req-date')?.addEventListener('change', e => {
+                orderFormState.requestDate = e.target.value;
+            });
+            document.getElementById('form-del-date')?.addEventListener('change', e => {
+                orderFormState.deliveryDate = e.target.value;
+            });
+
+            // Category Dropdown & Prev/Next
+            document.getElementById('form-category-dropdown').addEventListener('change', e => {
+                orderFormState.selectedCategoryIndex = parseInt(e.target.value, 10);
+                renderOrderFormView(container);
+            });
+
+            document.getElementById('btn-cat-prev').addEventListener('click', () => {
+                if (orderFormState.selectedCategoryIndex > 0) {
+                    orderFormState.selectedCategoryIndex--;
+                    renderOrderFormView(container);
+                }
+            });
+
+            document.getElementById('btn-cat-next').addEventListener('click', () => {
+                if (orderFormState.selectedCategoryIndex < categories.length - 1) {
+                    orderFormState.selectedCategoryIndex++;
+                    renderOrderFormView(container);
+                }
+            });
+
+            // Quantity Inputs
+            document.querySelectorAll('.order-qty-field').forEach(input => {
+                input.addEventListener('input', e => {
+                    const itemId = e.target.getAttribute('data-item-id');
+                    const num = parseFloat(e.target.value);
+                    if (!isNaN(num) && num > 0) {
+                        orderFormState.quantities[itemId] = num;
+                    } else {
+                        delete orderFormState.quantities[itemId];
+                    }
+                });
+            });
+
+            // Action Buttons
+            document.getElementById('btn-order-add').addEventListener('click', () => {
+                orderFormState.isActive = true;
+                orderFormState.editingOrderId = null;
+                orderFormState.statusLabel = 'New Order Entry';
+                orderFormState.quantities = {};
+                renderOrderFormView(container);
+                showToast('Order form activated! Enter quantities across categories and click Save.', 'success');
+            });
+
+            document.getElementById('btn-order-modify').addEventListener('click', () => {
+                // Find existing order for current Branch + Destination + DeliveryDate (or Suspended order)
+                const matching = state.orders.filter(o =>
+                    o.branchId === orderFormState.branchId &&
+                    o.destinationId === orderFormState.destinationId &&
+                    o.deliveryDate === orderFormState.deliveryDate
+                );
+
+                if (matching.length > 0) {
+                    const target = matching[matching.length - 1];
+                    orderFormState.isActive = true;
+                    orderFormState.editingOrderId = target.id;
+                    orderFormState.statusLabel = `Modifying (${target.status})`;
+                    orderFormState.requestDate = target.requestDate;
+                    orderFormState.deliveryDate = target.deliveryDate;
+                    orderFormState.quantities = { ...(target.quantities || {}) };
+                    renderOrderFormView(container);
+                    showToast(`Loaded order ${target.id} for modification.`, 'info');
+                } else {
+                    orderFormState.isActive = true;
+                    orderFormState.statusLabel = 'Editing Mode';
+                    renderOrderFormView(container);
+                    showToast('Form unlocked for editing.', 'info');
+                }
+            });
+
+            document.getElementById('btn-order-suspend').addEventListener('click', async () => {
+                const branchObj = state.branches.find(b => b.id === orderFormState.branchId);
+                const destObj = state.destinations.find(d => d.id === orderFormState.destinationId);
+
+                const orderId = orderFormState.editingOrderId || ('ORD-' + Date.now());
+                const record = {
+                    id: orderId,
+                    branchId: orderFormState.branchId,
+                    branchName: branchObj ? branchObj.name : 'Unknown Branch',
+                    destinationId: orderFormState.destinationId,
+                    destinationName: destObj ? destObj.name : 'Unknown Destination',
+                    requestDate: orderFormState.requestDate,
+                    deliveryDate: orderFormState.deliveryDate,
+                    status: 'Suspended',
+                    quantities: { ...orderFormState.quantities },
+                    updatedAt: new Date().toISOString()
+                };
+
+                await dbSaveRecord('orders', record);
+                orderFormState.isActive = false;
+                orderFormState.statusLabel = 'Suspended (Saved as Draft)';
+                renderOrderFormView(container);
+                showToast('Order suspended and saved as draft.', 'warning');
+            });
+
+            document.getElementById('btn-order-save').addEventListener('click', async () => {
+                const filledEntries = Object.entries(orderFormState.quantities).filter(([_, q]) => q > 0);
+                if (filledEntries.length === 0) {
+                    showToast('Please enter a quantity for at least one item before saving.', 'error');
+                    return;
+                }
+
+                const branchObj = state.branches.find(b => b.id === orderFormState.branchId);
+                const destObj = state.destinations.find(d => d.id === orderFormState.destinationId);
+
+                // Check if an order already exists for the same Branch + Destination + Delivery Date
+                const existingSameSlot = state.orders.find(o =>
+                    o.branchId === orderFormState.branchId &&
+                    o.destinationId === orderFormState.destinationId &&
+                    o.deliveryDate === orderFormState.deliveryDate
+                );
+
+                const orderId = orderFormState.editingOrderId || (existingSameSlot ? existingSameSlot.id : 'ORD-' + Date.now());
+                const record = {
+                    id: orderId,
+                    branchId: orderFormState.branchId,
+                    branchName: branchObj ? branchObj.name : 'Unknown Branch',
+                    destinationId: orderFormState.destinationId,
+                    destinationName: destObj ? destObj.name : 'Unknown Destination',
+                    requestDate: orderFormState.requestDate,
+                    deliveryDate: orderFormState.deliveryDate,
+                    status: 'Submitted',
+                    quantities: { ...orderFormState.quantities },
+                    updatedAt: new Date().toISOString()
+                };
+
+                await dbSaveRecord('orders', record);
+                orderFormState.isActive = false;
+                orderFormState.editingOrderId = null;
+                orderFormState.statusLabel = 'Saved & Submitted';
+                renderOrderFormView(container);
+                showToast(`Order saved successfully (${filledEntries.length} items submitted to ${record.destinationName})!`, 'success');
+            });
+        }
+
+        // ------------------------------------------------------------
+        // 6. BRANCH ORDER HISTORY VIEW
+        // ------------------------------------------------------------
+        function renderBranchHistoryView(container) {
+            const branchOrders = state.orders
+                .filter(o => currentUser.role !== 'branch' || o.branchId === currentUser.branchId)
+                .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+
+            container.innerHTML = `
+                <div class="max-w-6xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-900">Submitted & Suspended Orders</h3>
+                            <p class="text-xs text-slate-500">Click "Load to Modify" to reopen any order in the Stock Transfer Form</p>
+                        </div>
+                        <button onclick="navigateTo('order-form')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
+                            <i data-lucide="plus" class="w-4 h-4"></i> New Order Form
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                    <th class="py-3.5 px-4">Order ID</th>
+                                    <th class="py-3.5 px-4">Branch</th>
+                                    <th class="py-3.5 px-4">Destination</th>
+                                    <th class="py-3.5 px-4">Req Date</th>
+                                    <th class="py-3.5 px-4">Delivery Date</th>
+                                    <th class="py-3.5 px-4">Items / Qty</th>
+                                    <th class="py-3.5 px-4">Status</th>
+                                    <th class="py-3.5 px-4 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-sm">
+                                ${branchOrders.length === 0 ? `
+                                    <tr><td colspan="8" class="py-10 text-center text-slate-400">No orders found yet.</td></tr>
+                                ` : branchOrders.map(ord => {
+                                    const qtys = Object.values(ord.quantities || {});
+                                    const itemCount = qtys.filter(q => q > 0).length;
+                                    const sumQty = qtys.reduce((s, q) => s + Number(q || 0), 0);
+                                    const badge = ord.status === 'Suspended'
+                                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                                    return `
+                                        <tr class="hover:bg-slate-50 transition">
+                                            <td class="py-3 px-4 font-mono text-xs font-bold text-slate-600">${ord.id}</td>
+                                            <td class="py-3 px-4 font-semibold text-slate-900">${ord.branchName}</td>
+                                            <td class="py-3 px-4 font-medium text-blue-700">${ord.destinationName}</td>
+                                            <td class="py-3 px-4 text-slate-600">${ord.requestDate}</td>
+                                            <td class="py-3 px-4 font-semibold text-slate-800">${ord.deliveryDate}</td>
+                                            <td class="py-3 px-4 text-slate-600">${itemCount} items (${sumQty} qty)</td>
+                                            <td class="py-3 px-4"><span class="px-2.5 py-1 rounded-full text-xs font-bold border ${badge}">${ord.status}</span></td>
+                                            <td class="py-3 px-4 text-right">
+                                                <button onclick="loadOrderIntoForm('${ord.id}')" class="px-3 py-1.5 bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 font-semibold rounded-lg text-xs transition">
+                                                    Load to Modify
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.loadOrderIntoForm = function(orderId) {
+            const ord = state.orders.find(o => o.id === orderId);
+            if (!ord) return;
+            orderFormState = {
+                isActive: true,
+                editingOrderId: ord.id,
+                statusLabel: `Modifying (${ord.status})`,
+                branchId: ord.branchId,
+                destinationId: ord.destinationId,
+                requestDate: ord.requestDate,
+                deliveryDate: ord.deliveryDate,
+                selectedCategoryIndex: 0,
+                quantities: { ...(ord.quantities || {}) }
+            };
+            navigateTo('order-form');
+            showToast(`Loaded ${ord.id} into editor.`, 'info');
+        };
+
+        // ------------------------------------------------------------
+        // 7. FACTORY & WAREHOUSE ORDER MATRIX (Double-Click Modify & Save)
+        // ------------------------------------------------------------
+        let matrixFilter = {
+            date: TOMORROW,
+            destinationId: 'ALL',
+            categoryId: 'ALL'
+        };
+        let matrixPendingEdits = {}; // `${branchId}__${itemId}` -> newQty
+
+        function renderOrderMatrixView(container) {
+            const branches = state.branches;
+            const destinations = state.destinations;
+            const categories = state.categories;
+
+            const filteredItems = matrixFilter.categoryId === 'ALL'
+                ? state.items
+                : state.items.filter(i => i.categoryId === matrixFilter.categoryId);
+
+            const matchingOrders = state.orders.filter(o => {
+                const dateOk = o.deliveryDate === matrixFilter.date || o.requestDate === matrixFilter.date;
+                const destOk = matrixFilter.destinationId === 'ALL' || o.destinationId === matrixFilter.destinationId;
+                return dateOk && destOk && o.status !== 'Suspended';
+            });
+
+            // Build lookup: branchId -> itemId -> qty
+            const cellMatrix = {};
+            branches.forEach(b => { cellMatrix[b.id] = {}; });
+
+            matchingOrders.forEach(ord => {
+                if (!cellMatrix[ord.branchId]) cellMatrix[ord.branchId] = {};
+                Object.entries(ord.quantities || {}).forEach(([itemId, q]) => {
+                    cellMatrix[ord.branchId][itemId] = (cellMatrix[ord.branchId][itemId] || 0) + Number(q || 0);
+                });
+            });
+
+            // Overlay any unsaved double-click edits
+            Object.entries(matrixPendingEdits).forEach(([key, val]) => {
+                const [bId, iId] = key.split('__');
+                if (!cellMatrix[bId]) cellMatrix[bId] = {};
+                cellMatrix[bId][iId] = val;
+            });
+
+            const pendingCount = Object.keys(matrixPendingEdits).length;
+            const branchColumnTotals = {};
+            branches.forEach(b => { branchColumnTotals[b.id] = 0; });
+            let grandTotal = 0;
+
+            container.innerHTML = `
+                <div class="space-y-6">
+                    <!-- Filter & Export Toolbar -->
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Order / Delivery Date</label>
+                                <input type="date" id="matrix-date" value="${matrixFilter.date}" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-blue-600 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Destination (Factory / WH)</label>
+                                <select id="matrix-dest" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-blue-600 outline-none">
+                                    <option value="ALL" ${matrixFilter.destinationId === 'ALL' ? 'selected' : ''}>All Destinations</option>
+                                    ${destinations.map(d => `<option value="${d.id}" ${matrixFilter.destinationId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Item Category</label>
+                                <select id="matrix-cat" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-blue-600 outline-none">
+                                    <option value="ALL" ${matrixFilter.categoryId === 'ALL' ? 'selected' : ''}>All Categories</option>
+                                    ${categories.map(c => `<option value="${c.id}" ${matrixFilter.categoryId === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button id="btn-matrix-excel" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
+                                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel
+                            </button>
+                            <button id="btn-matrix-pdf" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
+                                <i data-lucide="file-text" class="w-4 h-4"></i> PDF
+                            </button>
+                            <button id="btn-matrix-save" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md shadow-blue-600/20 transition flex items-center gap-1.5">
+                                <i data-lucide="save" class="w-4 h-4"></i> Save Changes ${pendingCount > 0 ? `(${pendingCount})` : ''}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Helper Tip -->
+                    <div class="flex items-center justify-between px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+                        <span class="flex items-center gap-2 font-medium">
+                            <i data-lucide="mouse-pointer-click" class="w-4 h-4 text-blue-600"></i>
+                            Tip: <strong>Double-click</strong> any branch quantity cell below to modify its value inline, then click <strong>Save Changes</strong>.
+                        </span>
+                        <span class="font-bold">${matchingOrders.length} Branch Order(s) Loaded</span>
+                    </div>
+
+                    <!-- Consolidated Matrix Table -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+                        <table class="w-full text-left border-collapse whitespace-nowrap">
+                            <thead>
+                                <tr class="bg-slate-100 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                                    <th class="py-3.5 px-4 sticky left-0 bg-slate-100 z-10 border-r border-slate-200">Item Code</th>
+                                    <th class="py-3.5 px-4 sticky left-24 bg-slate-100 z-10 border-r border-slate-200">Item Name</th>
+                                    <th class="py-3.5 px-4 border-r border-slate-200">Unit</th>
+                                    ${branches.map(b => `<th class="py-3.5 px-4 text-center border-r border-slate-200 min-w-[140px]">${b.name}</th>`).join('')}
+                                    <th class="py-3.5 px-4 text-center bg-blue-100/70 text-blue-900 font-extrabold">Total Order</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-sm">
+                                ${filteredItems.map(item => {
+                                    let rowTotal = 0;
+                                    const branchTds = branches.map(b => {
+                                        const qty = cellMatrix[b.id]?.[item.id] || 0;
+                                        rowTotal += qty;
+                                        branchColumnTotals[b.id] += qty;
+                                        const isEdited = Object.prototype.hasOwnProperty.call(matrixPendingEdits, `${b.id}__${item.id}`);
+
+                                        return `
+                                            <td data-branch-id="${b.id}" data-item-id="${item.id}" data-qty="${qty}" class="matrix-editable-cell py-2.5 px-4 text-center border-r border-slate-100 cursor-pointer select-none transition hover:bg-blue-50/70 ${isEdited ? 'bg-amber-50 font-bold text-amber-800 ring-1 ring-inset ring-amber-300' : ''}" title="Double-click to edit">
+                                                ${qty > 0 ? `<span class="font-bold text-slate-900">${qty}</span>` : `<span class="text-slate-300">-</span>`}
+                                            </td>
+                                        `;
+                                    }).join('');
+
+                                    grandTotal += rowTotal;
+
+                                    return `
+                                        <tr class="hover:bg-slate-50/80 transition">
+                                            <td class="py-3 px-4 font-mono font-bold text-slate-700 sticky left-0 bg-white border-r border-slate-200">${item.code}</td>
+                                            <td class="py-3 px-4 font-semibold text-slate-900 sticky left-24 bg-white border-r border-slate-200">${item.name}</td>
+                                            <td class="py-3 px-4 text-xs font-bold text-slate-500 border-r border-slate-200">${item.unit}</td>
+                                            ${branchTds}
+                                            <td class="py-3 px-4 text-center font-extrabold text-blue-700 bg-blue-50/40">${rowTotal > 0 ? rowTotal : '-'}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                            <tfoot>
+                                <tr class="bg-slate-100 border-t-2 border-slate-300 font-extrabold text-sm text-slate-900">
+                                    <td colspan="3" class="py-3.5 px-4 text-right uppercase text-xs tracking-wider text-slate-600 border-r border-slate-200">Branch Total Quantities:</td>
+                                    ${branches.map(b => `<td class="py-3.5 px-4 text-center border-r border-slate-200 text-slate-900">${branchColumnTotals[b.id] || 0}</td>`).join('')}
+                                    <td class="py-3.5 px-4 text-center bg-blue-600 text-white">${grandTotal}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            // Filter Listeners
+            document.getElementById('matrix-date').addEventListener('change', e => {
+                matrixFilter.date = e.target.value;
+                matrixPendingEdits = {};
+                renderOrderMatrixView(container);
+            });
+            document.getElementById('matrix-dest').addEventListener('change', e => {
+                matrixFilter.destinationId = e.target.value;
+                matrixPendingEdits = {};
+                renderOrderMatrixView(container);
+            });
+            document.getElementById('matrix-cat').addEventListener('change', e => {
+                matrixFilter.categoryId = e.target.value;
+                renderOrderMatrixView(container);
+            });
+
+            // Double-Click Inline Cell Editor
+            document.querySelectorAll('.matrix-editable-cell').forEach(td => {
+                td.addEventListener('dblclick', () => {
+                    if (td.querySelector('input')) return;
+                    const branchId = td.getAttribute('data-branch-id');
+                    const itemId = td.getAttribute('data-item-id');
+                    const currentVal = parseFloat(td.getAttribute('data-qty')) || 0;
+
+                    td.innerHTML = `<input type="number" min="0" step="any" value="${currentVal}" class="w-20 px-2 py-1 text-center bg-white border-2 border-blue-600 rounded-lg font-bold text-slate-900 outline-none shadow-sm">`;
+                    const input = td.querySelector('input');
+                    input.focus();
+                    input.select();
+
+                    const commitEdit = () => {
+                        const newVal = parseFloat(input.value);
+                        const finalVal = (!isNaN(newVal) && newVal >= 0) ? newVal : 0;
+                        matrixPendingEdits[`${branchId}__${itemId}`] = finalVal;
+                        renderOrderMatrixView(container);
+                    };
+
+                    input.addEventListener('blur', commitEdit);
+                    input.addEventListener('keydown', e => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            commitEdit();
+                        } else if (e.key === 'Escape') {
+                            renderOrderMatrixView(container);
+                        }
+                    });
+                });
+            });
+
+            // Save Modified Matrix Quantities back to Orders
+            document.getElementById('btn-matrix-save').addEventListener('click', async () => {
+                if (Object.keys(matrixPendingEdits).length === 0) {
+                    showToast('No double-click modifications to save.', 'info');
+                    return;
+                }
+
+                const targetDestId = matrixFilter.destinationId === 'ALL'
+                    ? (state.destinations[0]?.id || 'DST-01')
+                    : matrixFilter.destinationId;
+                const targetDestObj = state.destinations.find(d => d.id === targetDestId);
+
+                // Group edits by branchId
+                const editsByBranch = {};
+                Object.entries(matrixPendingEdits).forEach(([key, qty]) => {
+                    const [branchId, itemId] = key.split('__');
+                    if (!editsByBranch[branchId]) editsByBranch[branchId] = {};
+                    editsByBranch[branchId][itemId] = qty;
+                });
+
+                for (const [branchId, itemUpdates] of Object.entries(editsByBranch)) {
+                    const branchObj = state.branches.find(b => b.id === branchId);
+                    let targetOrder = matchingOrders.find(o => o.branchId === branchId);
+
+                    if (targetOrder) {
+                        const updatedQtys = { ...(targetOrder.quantities || {}) };
+                        Object.entries(itemUpdates).forEach(([itemId, q]) => {
+                            if (q > 0) updatedQtys[itemId] = q;
+                            else delete updatedQtys[itemId];
+                        });
+                        await dbSaveRecord('orders', {
+                            ...targetOrder,
+                            quantities: updatedQtys,
+                            updatedAt: new Date().toISOString()
+                        });
+                    } else {
+                        const cleanQtys = {};
+                        Object.entries(itemUpdates).forEach(([itemId, q]) => {
+                            if (q > 0) cleanQtys[itemId] = q;
+                        });
+                        if (Object.keys(cleanQtys).length > 0) {
+                            await dbSaveRecord('orders', {
+                                id: 'ORD-' + Date.now() + '-' + branchId,
+                                branchId,
+                                branchName: branchObj ? branchObj.name : branchId,
+                                destinationId: targetDestId,
+                                destinationName: targetDestObj ? targetDestObj.name : 'Central Factory',
+                                requestDate: matrixFilter.date,
+                                deliveryDate: matrixFilter.date,
+                                status: 'Submitted',
+                                quantities: cleanQtys,
+                                updatedAt: new Date().toISOString()
+                            });
+                        }
+                    }
+                }
+
+                matrixPendingEdits = {};
+                renderOrderMatrixView(container);
+                showToast('All double-click matrix modifications saved to database!', 'success');
+            });
+
+            // Excel Export of Consolidated Matrix
+            document.getElementById('btn-matrix-excel').addEventListener('click', () => {
+                const rows = filteredItems.map(item => {
+                    const row = {
+                        'Item Code': item.code,
+                        'Item Name': item.name,
+                        'Unit': item.unit
+                    };
+                    let sum = 0;
+                    branches.forEach(b => {
+                        const q = cellMatrix[b.id]?.[item.id] || 0;
+                        row[b.name] = q;
+                        sum += q;
+                    });
+                    row['Total Order'] = sum;
+                    return row;
+                });
+
+                const ws = XLSX.utils.json_to_sheet(rows);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Order Matrix');
+                XLSX.writeFile(wb, `Order_Matrix_${matrixFilter.date}.xlsx`);
+                showToast('Consolidated Matrix exported to Excel!', 'success');
+            });
+
+            // PDF Export of Consolidated Matrix
+            document.getElementById('btn-matrix-pdf').addEventListener('click', () => {
+                const { jsPDF } = window.jspdf;
+                const docPdf = new jsPDF('landscape');
+                const destName = matrixFilter.destinationId === 'ALL'
+                    ? 'All Destinations'
+                    : (destinations.find(d => d.id === matrixFilter.destinationId)?.name || '');
+
+                docPdf.setFontSize(14);
+                docPdf.text(`Consolidated Factory & Warehouse Order Matrix (${matrixFilter.date})`, 14, 15);
+                docPdf.setFontSize(10);
+                docPdf.text(`Destination: ${destName}`, 14, 21);
+
+                const head = [['Code', 'Item Name', 'Unit', ...branches.map(b => b.name), 'Total']];
+                const body = filteredItems.map(item => {
+                    let sum = 0;
+                    const vals = branches.map(b => {
+                        const q = cellMatrix[b.id]?.[item.id] || 0;
+                        sum += q;
+                        return q > 0 ? q : '-';
+                    });
+                    return [item.code, item.name, item.unit, ...vals, sum > 0 ? sum : '-'];
+                });
+
+                docPdf.autoTable({ head, body, startY: 26, styles: { fontSize: 8 } });
+                docPdf.save(`Order_Matrix_${matrixFilter.date}.pdf`);
+                showToast('Consolidated Matrix exported to PDF!', 'success');
+            });
+        }
+
+        // ------------------------------------------------------------
+        // 8. BRANCH-WISE DELIVERY CHALLAN & PRINT / EXCEL / PDF
+        // ------------------------------------------------------------
+        let challanFilter = {
+            branchId: '',
+            categoryId: 'ALL',
+            destinationId: 'ALL',
+            deliveryDate: TOMORROW
+        };
+
+        function renderDeliveryChallanView(container) {
+            const branches = currentUser.role === 'branch' && currentUser.branchId
+                ? state.branches.filter(b => b.id === currentUser.branchId)
+                : state.branches;
+            const categories = state.categories;
+            const destinations = state.destinations;
+
+            if ((!challanFilter.branchId || !branches.some(b => b.id === challanFilter.branchId)) && branches.length > 0) {
+                challanFilter.branchId = branches[0].id;
+            }
+
+            const selectedBranch = branches.find(b => b.id === challanFilter.branchId);
+            const selectedCategory = categories.find(c => c.id === challanFilter.categoryId);
+            const selectedDest = destinations.find(d => d.id === challanFilter.destinationId);
+
+            // Aggregate quantities for this branch + date + destination
+            const matchingOrders = state.orders.filter(o =>
+                o.branchId === challanFilter.branchId &&
+                (o.deliveryDate === challanFilter.deliveryDate || o.requestDate === challanFilter.deliveryDate) &&
+                (challanFilter.destinationId === 'ALL' || o.destinationId === challanFilter.destinationId) &&
+                o.status !== 'Suspended'
+            );
+
+            const qtyMap = {};
+            matchingOrders.forEach(o => {
+                Object.entries(o.quantities || {}).forEach(([itemId, q]) => {
+                    qtyMap[itemId] = (qtyMap[itemId] || 0) + Number(q || 0);
+                });
+            });
+
+            const categoryItems = challanFilter.categoryId === 'ALL'
+                ? state.items
+                : state.items.filter(i => i.categoryId === challanFilter.categoryId);
+
+            // Show items that belong to the selected category (highlighting ordered ones)
+            const totalUnitsCount = categoryItems.reduce((acc, it) => acc + (qtyMap[it.id] || 0), 0);
+
+            container.innerHTML = `
+                <div class="max-w-5xl mx-auto space-y-6">
+                    <!-- Filter & Print Controls -->
+                    <div class="no-print bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">1. Select Branch</label>
+                                <select id="challan-branch" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none">
+                                    ${branches.map(b => `<option value="${b.id}" ${b.id === challanFilter.branchId ? 'selected' : ''}>${b.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">2. Select Category</label>
+                                <select id="challan-category" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none">
+                                    <option value="ALL" ${challanFilter.categoryId === 'ALL' ? 'selected' : ''}>All Categories</option>
+                                    ${categories.map(c => `<option value="${c.id}" ${c.id === challanFilter.categoryId ? 'selected' : ''}>${c.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">3. Source Destination</label>
+                                <select id="challan-dest" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-blue-600 outline-none">
+                                    <option value="ALL" ${challanFilter.destinationId === 'ALL' ? 'selected' : ''}>All Sources (Factory & WH)</option>
+                                    ${destinations.map(d => `<option value="${d.id}" ${d.id === challanFilter.destinationId ? 'selected' : ''}>${d.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">4. Delivery Date</label>
+                                <input type="date" id="challan-date" value="${challanFilter.deliveryDate}" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-blue-600 outline-none">
+                            </div>
+                        </div>
+
+                        <div class="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-end gap-2.5">
+                            <button id="btn-challan-print" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md shadow-blue-600/20 transition flex items-center gap-1.5">
+                                <i data-lucide="printer" class="w-4 h-4"></i> Print Delivery Paper
+                            </button>
+                            <button id="btn-challan-excel" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
+                                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export Excel
+                            </button>
+                            <button id="btn-challan-pdf" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
+                                <i data-lucide="file-text" class="w-4 h-4"></i> Export PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Printable Delivery Paper Sheet -->
+                    <div id="printable-challan" class="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 space-y-6">
+                        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b-2 border-slate-800 pb-5">
+                            <div>
+                                <div class="text-xs font-extrabold uppercase tracking-widest text-blue-600">Stock Transfer Dispatch Note</div>
+                                <h2 class="text-2xl font-black text-slate-900 tracking-tight mt-0.5">DELIVERY CHALLAN</h2>
+                                <p class="text-xs text-slate-500 mt-1">Central Commissary Factory & Logistics Warehouse</p>
+                            </div>
+                            <div class="sm:text-right space-y-1 text-xs">
+                                <div class="font-mono font-bold text-slate-800">CHALLAN NO: CHL-${challanFilter.deliveryDate.replace(/-/g, '')}-${selectedBranch?.code || 'BR'}</div>
+                                <div class="text-slate-600">Delivery Date: <strong class="text-slate-900">${challanFilter.deliveryDate}</strong></div>
+                                <div class="text-slate-600">Dispatch From: <strong class="text-slate-900">${selectedDest ? selectedDest.name : 'All Warehouses / Factory'}</strong></div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm">
+                            <div>
+                                <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Deliver To Branch</div>
+                                <div class="font-extrabold text-slate-900 text-base">${selectedBranch ? selectedBranch.name : '-'}</div>
+                                <div class="text-xs text-slate-500">${selectedBranch?.address || ''}</div>
+                            </div>
+                            <div class="sm:text-right">
+                                <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Item Category Filter</div>
+                                <div class="font-extrabold text-blue-700 text-base">${selectedCategory ? selectedCategory.name : 'All Categories'}</div>
+                                <div class="text-xs text-slate-500">Total Dispatch Qty: <strong>${totalUnitsCount}</strong></div>
+                            </div>
+                        </div>
+
+                        <!-- Delivery Table -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse border border-slate-300 text-sm">
+                                <thead>
+                                    <tr class="bg-slate-100 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                        <th class="py-2.5 px-3 border border-slate-300 w-12 text-center">SL</th>
+                                        <th class="py-2.5 px-3 border border-slate-300 w-32">Item Code</th>
+                                        <th class="py-2.5 px-3 border border-slate-300">Item Description</th>
+                                        <th class="py-2.5 px-3 border border-slate-300 w-24 text-center">Unit</th>
+                                        <th class="py-2.5 px-3 border border-slate-300 w-32 text-right">Order Qty</th>
+                                        <th class="py-2.5 px-3 border border-slate-300 w-32 text-right">Delivered Qty</th>
+                                        <th class="py-2.5 px-3 border border-slate-300 w-36">Remarks</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${categoryItems.map((item, idx) => {
+                                        const qty = qtyMap[item.id] || 0;
+                                        return `
+                                            <tr class="${qty > 0 ? 'bg-white' : 'bg-slate-50/40 text-slate-400'}">
+                                                <td class="py-2.5 px-3 border border-slate-300 text-center">${idx + 1}</td>
+                                                <td class="py-2.5 px-3 border border-slate-300 font-mono font-bold text-slate-700">${item.code}</td>
+                                                <td class="py-2.5 px-3 border border-slate-300 font-semibold text-slate-900">${item.name}</td>
+                                                <td class="py-2.5 px-3 border border-slate-300 text-center font-medium">${item.unit}</td>
+                                                <td class="py-2.5 px-3 border border-slate-300 text-right font-extrabold text-slate-900">${qty > 0 ? qty : '-'}</td>
+                                                <td class="py-2.5 px-3 border border-slate-300 text-right font-bold text-blue-700">${qty > 0 ? qty : ''}</td>
+                                                <td class="py-2.5 px-3 border border-slate-300"></td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="bg-slate-100 font-extrabold text-slate-900">
+                                        <td colspan="4" class="py-2.5 px-3 border border-slate-300 text-right uppercase text-xs">Total Quantity:</td>
+                                        <td class="py-2.5 px-3 border border-slate-300 text-right">${totalUnitsCount}</td>
+                                        <td class="py-2.5 px-3 border border-slate-300 text-right">${totalUnitsCount}</td>
+                                        <td class="py-2.5 px-3 border border-slate-300"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <!-- Signature Footer -->
+                        <div class="pt-14 grid grid-cols-3 gap-8 text-center text-xs text-slate-600">
+                            <div>
+                                <div class="border-t border-slate-400 pt-2 font-bold text-slate-800">Prepared By</div>
+                                <div class="text-[11px] text-slate-400">Store / Factory Officer</div>
+                            </div>
+                            <div>
+                                <div class="border-t border-slate-400 pt-2 font-bold text-slate-800">Verified & Dispatched By</div>
+                                <div class="text-[11px] text-slate-400">Logistics / Driver</div>
+                            </div>
+                            <div>
+                                <div class="border-t border-slate-400 pt-2 font-bold text-slate-800">Received By</div>
+                                <div class="text-[11px] text-slate-400">${selectedBranch ? selectedBranch.name : 'Branch Manager'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Filter Events
+            document.getElementById('challan-branch').addEventListener('change', e => {
+                challanFilter.branchId = e.target.value;
+                renderDeliveryChallanView(container);
+            });
+            document.getElementById('challan-category').addEventListener('change', e => {
+                challanFilter.categoryId = e.target.value;
+                renderDeliveryChallanView(container);
+            });
+            document.getElementById('challan-dest').addEventListener('change', e => {
+                challanFilter.destinationId = e.target.value;
+                renderDeliveryChallanView(container);
+            });
+            document.getElementById('challan-date').addEventListener('change', e => {
+                challanFilter.deliveryDate = e.target.value;
+                renderDeliveryChallanView(container);
+            });
+
+            // Print
+            document.getElementById('btn-challan-print').addEventListener('click', () => {
+                window.print();
+            });
+
+            // Excel Export
+            document.getElementById('btn-challan-excel').addEventListener('click', () => {
+                const branchName = selectedBranch?.name || 'Branch';
+                const catName = selectedCategory?.name || 'All_Categories';
+                const rows = categoryItems.map((item, idx) => ({
+                    'SL': idx + 1,
+                    'Item Code': item.code,
+                    'Item Name': item.name,
+                    'Unit': item.unit,
+                    'Order Qty': qtyMap[item.id] || 0,
+                    'Delivered Qty': qtyMap[item.id] || 0
+                }));
+                const ws = XLSX.utils.json_to_sheet(rows);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Delivery Challan');
+                XLSX.writeFile(wb, `Delivery_${branchName}_${catName}_${challanFilter.deliveryDate}.xlsx`);
+                showToast('Delivery Challan exported to Excel!', 'success');
+            });
+
+            // PDF Export
+            document.getElementById('btn-challan-pdf').addEventListener('click', () => {
+                const { jsPDF } = window.jspdf;
+                const docPdf = new jsPDF();
+                const branchName = selectedBranch?.name || 'Branch';
+                const catName = selectedCategory?.name || 'All Categories';
+
+                docPdf.setFontSize(16);
+                docPdf.text('DELIVERY CHALLAN - STOCK TRANSFER', 14, 18);
+                docPdf.setFontSize(10);
+                docPdf.text(`Branch: ${branchName}   |   Delivery Date: ${challanFilter.deliveryDate}`, 14, 26);
+                docPdf.text(`Category: ${catName}   |   Source: ${selectedDest ? selectedDest.name : 'All Sources'}`, 14, 32);
+
+                const head = [['SL', 'Item Code', 'Item Name', 'Unit', 'Order Qty', 'Delivered Qty']];
+                const body = categoryItems.map((item, idx) => [
+                    idx + 1,
+                    item.code,
+                    item.name,
+                    item.unit,
+                    qtyMap[item.id] || '-',
+                    qtyMap[item.id] || '-'
+                ]);
+
+                docPdf.autoTable({ head, body, startY: 38, styles: { fontSize: 9 } });
+                docPdf.save(`Delivery_${branchName}_${catName}_${challanFilter.deliveryDate}.pdf`);
+                showToast('Delivery Challan exported to PDF!', 'success');
+            });
+        }
+
+        // ------------------------------------------------------------
+        // 9. MASTER SETUP: CATEGORIES & ITEMS (Add, Modify, Delete)
+        // ------------------------------------------------------------
+        let masterItemCatFilter = 'ALL';
+
+        function renderMasterItemsView(container) {
+            const categories = state.categories;
+            const items = masterItemCatFilter === 'ALL'
+                ? state.items
+                : state.items.filter(i => i.categoryId === masterItemCatFilter);
+
+            container.innerHTML = `
+                <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Left Column: Categories Management -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden h-fit">
+                        <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Item Categories</h3>
+                                <p class="text-xs text-slate-500">${categories.length} Categories</p>
+                            </div>
+                            <button onclick="openCategoryModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition flex items-center gap-1">
+                                <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Category
+                            </button>
+                        </div>
+                        <div class="divide-y divide-slate-100">
+                            ${categories.map(cat => {
+                                const count = state.items.filter(i => i.categoryId === cat.id).length;
+                                return `
+                                    <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition">
+                                        <div>
+                                            <div class="font-bold text-sm text-slate-900">${cat.name}</div>
+                                            <div class="text-xs text-slate-400">${count} item(s)</div>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <button onclick="openCategoryModal('${cat.id}')" title="Modify Category" class="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                            <button onclick="deleteCategory('${cat.id}')" title="Delete Category" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Right 2 Columns: Items Management -->
+                    <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
+                            <div class="flex items-center gap-3">
+                                <h3 class="font-bold text-slate-900">Items List</h3>
+                                <select id="master-item-cat-filter" class="px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold outline-none">
+                                    <option value="ALL" ${masterItemCatFilter === 'ALL' ? 'selected' : ''}>All Categories (${state.items.length})</option>
+                                    ${categories.map(c => `<option value="${c.id}" ${masterItemCatFilter === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <button onclick="openItemModal()" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm">
+                                <i data-lucide="plus" class="w-4 h-4"></i> Add New Item
+                            </button>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                        <th class="py-3 px-4">Code</th>
+                                        <th class="py-3 px-4">Item Name</th>
+                                        <th class="py-3 px-4">Category</th>
+                                        <th class="py-3 px-4">Unit</th>
+                                        <th class="py-3 px-4 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-sm">
+                                    ${items.map(it => {
+                                        const cat = categories.find(c => c.id === it.categoryId);
+                                        return `
+                                            <tr class="hover:bg-slate-50 transition">
+                                                <td class="py-3 px-4 font-mono font-bold text-slate-700">${it.code}</td>
+                                                <td class="py-3 px-4 font-semibold text-slate-900">${it.name}</td>
+                                                <td class="py-3 px-4 text-xs text-slate-600">${cat ? cat.name : 'Unassigned'}</td>
+                                                <td class="py-3 px-4"><span class="px-2 py-0.5 bg-slate-100 rounded text-xs font-bold text-slate-700">${it.unit}</span></td>
+                                                <td class="py-3 px-4 text-right space-x-1">
+                                                    <button onclick="openItemModal('${it.id}')" title="Modify Item" class="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                                    <button onclick="deleteItem('${it.id}')" title="Delete Item" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('master-item-cat-filter').addEventListener('change', e => {
+                masterItemCatFilter = e.target.value;
+                renderMasterItemsView(container);
+            });
+        }
+
+        window.openCategoryModal = function(catId = null) {
+            const existing = catId ? state.categories.find(c => c.id === catId) : null;
+            openModal({
+                title: existing ? 'Modify Category' : 'Add New Category',
+                confirmText: existing ? 'Update Category' : 'Save Category',
+                bodyHtml: `
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Category Name</label>
+                        <input type="text" id="modal-cat-name" value="${existing ? existing.name : ''}" placeholder="e.g. Fresh Dairy & Cheese" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-blue-600 outline-none">
+                    </div>
+                `,
+                onConfirm: async () => {
+                    const name = document.getElementById('modal-cat-name').value.trim();
+                    if (!name) return showToast('Category name is required!', 'error');
+                    const id = existing ? existing.id : ('CAT-' + Date.now());
+                    await dbSaveRecord('categories', { id, name });
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast(existing ? 'Category updated!' : 'Category added!', 'success');
+                }
+            });
+        };
+
+        window.deleteCategory = async function(catId) {
+            const linkedItems = state.items.filter(i => i.categoryId === catId);
+            if (linkedItems.length > 0) {
+                showToast(`Cannot delete: ${linkedItems.length} item(s) still belong to this category.`, 'error');
+                return;
+            }
+            await dbDeleteRecord('categories', catId);
+            renderCurrentRoute();
+            showToast('Category deleted.', 'info');
+        };
+
+        window.openItemModal = function(itemId = null) {
+            const existing = itemId ? state.items.find(i => i.id === itemId) : null;
+            openModal({
+                title: existing ? 'Modify Item' : 'Add New Item',
+                confirmText: existing ? 'Update Item' : 'Save Item',
+                bodyHtml: `
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Item Code</label>
+                                <input type="text" id="modal-item-code" value="${existing ? existing.code : ''}" placeholder="e.g. BAK-105" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold focus:ring-2 focus:ring-blue-600 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Unit</label>
+                                <input type="text" id="modal-item-unit" value="${existing ? existing.unit : 'KG'}" placeholder="KG, PCS, BOX, LTR" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold uppercase focus:ring-2 focus:ring-blue-600 outline-none">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Item Name</label>
+                            <input type="text" id="modal-item-name" value="${existing ? existing.name : ''}" placeholder="e.g. Mozzarella Shredded Cheese" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-blue-600 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Category</label>
+                            <select id="modal-item-cat" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-blue-600 outline-none">
+                                ${state.categories.map(c => `<option value="${c.id}" ${(existing && existing.categoryId === c.id) ? 'selected' : ''}>${c.name}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                `,
+                onConfirm: async () => {
+                    const code = document.getElementById('modal-item-code').value.trim().toUpperCase();
+                    const unit = document.getElementById('modal-item-unit').value.trim().toUpperCase();
+                    const name = document.getElementById('modal-item-name').value.trim();
+                    const categoryId = document.getElementById('modal-item-cat').value;
+                    if (!code || !unit || !name || !categoryId) {
+                        return showToast('Please fill in all item fields.', 'error');
+                    }
+                    const id = existing ? existing.id : ('ITM-' + Date.now());
+                    await dbSaveRecord('items', { id, code, name, unit, categoryId });
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast(existing ? 'Item updated!' : 'New item added!', 'success');
+                }
+            });
+        };
+
+        window.deleteItem = async function(itemId) {
+            await dbDeleteRecord('items', itemId);
+            renderCurrentRoute();
+            showToast('Item deleted.', 'info');
+        };
+
+        // ------------------------------------------------------------
+        // 10. MASTER SETUP: BRANCHES & WAREHOUSES / FACTORY
+        // ------------------------------------------------------------
+        function renderMasterLocationsView(container) {
+            container.innerHTML = `
+                <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Restaurant Branches -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Restaurant Branches</h3>
+                                <p class="text-xs text-slate-500">Branches that place stock transfer orders</p>
+                            </div>
+                            <button onclick="openBranchModal()" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition flex items-center gap-1">
+                                <i data-lucide="plus" class="w-4 h-4"></i> Add Branch
+                            </button>
+                        </div>
+                        <div class="divide-y divide-slate-100">
+                            ${state.branches.map(b => `
+                                <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition">
+                                    <div>
+                                        <div class="font-bold text-sm text-slate-900">${b.name} <span class="ml-1.5 font-mono text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-600">${b.code}</span></div>
+                                        <div class="text-xs text-slate-500 mt-0.5">${b.address || 'No address specified'}</div>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <button onclick="openBranchModal('${b.id}')" class="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                        <button onclick="deleteBranch('${b.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Destinations (Factory, Warehouse, Frozen Warehouse) -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Factories & Warehouses</h3>
+                                <p class="text-xs text-slate-500">Fulfillment destinations (Factory, Warehouse, Frozen WH)</p>
+                            </div>
+                            <button onclick="openDestinationModal()" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition flex items-center gap-1">
+                                <i data-lucide="plus" class="w-4 h-4"></i> Add Destination
+                            </button>
+                        </div>
+                        <div class="divide-y divide-slate-100">
+                            ${state.destinations.map(d => `
+                                <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition">
+                                    <div>
+                                        <div class="font-bold text-sm text-slate-900">${d.name}</div>
+                                        <span class="inline-block mt-1 px-2.5 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[11px] font-bold">${d.type}</span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <button onclick="openDestinationModal('${d.id}')" class="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                        <button onclick="deleteDestination('${d.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.openBranchModal = function(branchId = null) {
+            const existing = branchId ? state.branches.find(b => b.id === branchId) : null;
+            openModal({
+                title: existing ? 'Modify Branch' : 'Add New Restaurant Branch',
+                confirmText: existing ? 'Update Branch' : 'Save Branch',
+                bodyHtml: `
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Branch Name</label>
+                            <input type="text" id="modal-br-name" value="${existing ? existing.name : ''}" placeholder="e.g. Branch 4 - Uttara" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-600">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Short Code</label>
+                            <input type="text" id="modal-br-code" value="${existing ? existing.code : ''}" placeholder="e.g. UTT" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold uppercase outline-none focus:ring-2 focus:ring-blue-600">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Location Address</label>
+                            <input type="text" id="modal-br-addr" value="${existing ? existing.address : ''}" placeholder="Sector 7, Uttara" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-600">
+                        </div>
+                    </div>
+                `,
+                onConfirm: async () => {
+                    const name = document.getElementById('modal-br-name').value.trim();
+                    const code = document.getElementById('modal-br-code').value.trim().toUpperCase();
+                    const address = document.getElementById('modal-br-addr').value.trim();
+                    if (!name || !code) return showToast('Branch name and code are required.', 'error');
+                    const id = existing ? existing.id : ('BR-' + Date.now());
+                    await dbSaveRecord('branches', { id, name, code, address });
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast(existing ? 'Branch updated!' : 'Branch added!', 'success');
+                }
+            });
+        };
+
+        window.deleteBranch = async function(id) {
+            await dbDeleteRecord('branches', id);
+            renderCurrentRoute();
+            showToast('Branch removed.', 'info');
+        };
+
+        window.openDestinationModal = function(destId = null) {
+            const existing = destId ? state.destinations.find(d => d.id === destId) : null;
+            openModal({
+                title: existing ? 'Modify Destination' : 'Add Factory / Warehouse',
+                confirmText: existing ? 'Update' : 'Save',
+                bodyHtml: `
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Destination Name</label>
+                            <input type="text" id="modal-dst-name" value="${existing ? existing.name : ''}" placeholder="e.g. Cold Storage Hub 2" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-600">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Facility Type</label>
+                            <select id="modal-dst-type" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-600">
+                                <option value="Factory" ${existing?.type === 'Factory' ? 'selected' : ''}>Factory</option>
+                                <option value="Warehouse" ${existing?.type === 'Warehouse' ? 'selected' : ''}>Warehouse</option>
+                                <option value="Frozen Warehouse" ${existing?.type === 'Frozen Warehouse' ? 'selected' : ''}>Frozen Warehouse</option>
+                            </select>
+                        </div>
+                    </div>
+                `,
+                onConfirm: async () => {
+                    const name = document.getElementById('modal-dst-name').value.trim();
+                    const type = document.getElementById('modal-dst-type').value;
+                    if (!name) return showToast('Destination name is required.', 'error');
+                    const id = existing ? existing.id : ('DST-' + Date.now());
+                    await dbSaveRecord('destinations', { id, name, type });
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast(existing ? 'Destination updated!' : 'Destination added!', 'success');
+                }
+            });
+        };
+
+        window.deleteDestination = async function(id) {
+            await dbDeleteRecord('destinations', id);
+            renderCurrentRoute();
+            showToast('Destination removed.', 'info');
+        };
+
+        // ------------------------------------------------------------
+        // 11. MASTER SETUP: USERS & ACCESS CONTROL
+        // ------------------------------------------------------------
+        function renderMasterUsersView(container) {
+            container.innerHTML = `
+                <div class="max-w-5xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-900">System Users & Branch Logins</h3>
+                            <p class="text-xs text-slate-500">Assign unique username & password for each branch, factory, or warehouse user</p>
+                        </div>
+                        <button onclick="openUserModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm transition flex items-center gap-1.5 shadow-sm">
+                            <i data-lucide="user-plus" class="w-4 h-4"></i> Add New User
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                    <th class="py-3.5 px-4">Username</th>
+                                    <th class="py-3.5 px-4">Password</th>
+                                    <th class="py-3.5 px-4">Full Name</th>
+                                    <th class="py-3.5 px-4">Role</th>
+                                    <th class="py-3.5 px-4">Assigned Branch / Facility</th>
+                                    <th class="py-3.5 px-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-sm">
+                                ${state.users.map(u => {
+                                    const br = state.branches.find(b => b.id === u.branchId);
+                                    const dst = state.destinations.find(d => d.id === u.destinationId);
+                                    const assigned = br ? br.name : (dst ? dst.name : 'All Access');
+                                    return `
+                                        <tr class="hover:bg-slate-50 transition">
+                                            <td class="py-3 px-4 font-mono font-bold text-blue-600">${u.username}</td>
+                                            <td class="py-3 px-4 font-mono text-slate-500">${u.password}</td>
+                                            <td class="py-3 px-4 font-semibold text-slate-900">${u.fullName}</td>
+                                            <td class="py-3 px-4"><span class="px-2.5 py-0.5 bg-slate-100 text-slate-700 rounded-full text-xs font-bold uppercase">${u.role.replace('_', ' ')}</span></td>
+                                            <td class="py-3 px-4 text-slate-700 font-medium">${assigned}</td>
+                                            <td class="py-3 px-4 text-right space-x-1">
+                                                <button onclick="openUserModal('${u.id}')" class="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg transition"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                                ${u.username !== 'admin' ? `<button onclick="deleteUser('${u.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.openUserModal = function(userId = null) {
+            const existing = userId ? state.users.find(u => u.id === userId) : null;
+            openModal({
+                title: existing ? 'Modify User Account' : 'Create Branch / Warehouse User',
+                confirmText: existing ? 'Update User' : 'Create User',
+                bodyHtml: `
+                    <div class="space-y-3.5">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Username</label>
+                                <input type="text" id="modal-u-uname" value="${existing ? existing.username : ''}" placeholder="e.g. branch4" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold outline-none focus:ring-2 focus:ring-blue-600">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Password</label>
+                                <input type="text" id="modal-u-pwd" value="${existing ? existing.password : '1234'}" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-blue-600">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Full Name</label>
+                            <input type="text" id="modal-u-fname" value="${existing ? existing.fullName : ''}" placeholder="e.g. Uttara Branch Manager" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-600">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Access Role</label>
+                            <select id="modal-u-role" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-600">
+                                <option value="branch" ${existing?.role === 'branch' ? 'selected' : ''}>Branch User (Order Request Form)</option>
+                                <option value="factory_warehouse" ${existing?.role === 'factory_warehouse' ? 'selected' : ''}>Factory / Warehouse User (Matrix & Delivery)</option>
+                                <option value="admin" ${existing?.role === 'admin' ? 'selected' : ''}>Administrator (Full Access)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Assigned Branch (Required for Branch User)</label>
+                            <select id="modal-u-branch" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-600">
+                                <option value="">-- None / Central --</option>
+                                ${state.branches.map(b => `<option value="${b.id}" ${existing?.branchId === b.id ? 'selected' : ''}>${b.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Assigned Factory/Warehouse (Optional)</label>
+                            <select id="modal-u-dest" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-600">
+                                <option value="">-- All Facilities --</option>
+                                ${state.destinations.map(d => `<option value="${d.id}" ${existing?.destinationId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                `,
+                onConfirm: async () => {
+                    const username = document.getElementById('modal-u-uname').value.trim().toLowerCase();
+                    const password = document.getElementById('modal-u-pwd').value.trim();
+                    const fullName = document.getElementById('modal-u-fname').value.trim();
+                    const role = document.getElementById('modal-u-role').value;
+                    const branchId = role === 'branch' ? document.getElementById('modal-u-branch').value : '';
+                    const destinationId = role === 'factory_warehouse' ? document.getElementById('modal-u-dest').value : '';
+
+                    if (!username || !password || !fullName) {
+                        return showToast('Username, password, and full name are required.', 'error');
+                    }
+                    if (role === 'branch' && !branchId) {
+                        return showToast('Please assign a Branch for a Branch User.', 'error');
+                    }
+                    const id = existing ? existing.id : ('USR-' + Date.now());
+                    await dbSaveRecord('users', { id, username, password, fullName, role, branchId, destinationId });
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast(existing ? 'User updated!' : 'New user created!', 'success');
+                }
+            });
+        };
+
+        window.deleteUser = async function(id) {
+            await dbDeleteRecord('users', id);
+            renderCurrentRoute();
+            showToast('User deleted.', 'info');
+        };
+
+        // Initialize application on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            initHybridDatabase();
+        });
+    </script>
+</body>
+</html>
