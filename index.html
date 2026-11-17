@@ -268,7 +268,7 @@
             ]
         };
 
-        const STORAGE_KEY = 'kty_store_order_cache_v2';
+        const STORAGE_KEY = 'kty_store_order_cache_v3';
         let state = JSON.parse(JSON.stringify(DEFAULT_DATA));
 
         function loadFromLocalStorage() {
@@ -361,7 +361,6 @@
             if (window.activeModalConfirm) await window.activeModalConfirm();
         });
 
-        // ==================== UNIVERSAL LOGIN ENGINE ====================
         let currentUser = null;
         let currentRoute = 'order-form';
 
@@ -374,10 +373,8 @@
             e.preventDefault();
             const uname = document.getElementById('login-username').value.trim().toLowerCase();
             
-            // Universal match: matches state users OR bypasses instantly as Admin / Branch user
             let user = state.users.find(u => u.username.toLowerCase() === uname);
             if (!user) {
-                // Instant dynamic user creation for any entered username!
                 user = {
                     id: 'USR-' + Date.now(),
                     username: uname || 'admin',
@@ -447,7 +444,6 @@
             lucide.createIcons();
         }
 
-        // ==================== ORDER FORM VIEW ====================
         let orderFormState = {
             isActive: false,
             branchId: 'BR-01',
@@ -597,7 +593,6 @@
             orderFormState.isActive = false;
         };
 
-        // ==================== BRANCH HISTORY VIEW ====================
         function renderBranchHistoryView(container) {
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto bg-white rounded-2xl shadow-sm border p-6 space-y-4">
@@ -628,7 +623,6 @@
             `;
         }
 
-        // ==================== ORDER MATRIX VIEW ====================
         function renderOrderMatrixView(container) {
             container.innerHTML = `
                 <div class="bg-white rounded-2xl shadow-sm border p-6 space-y-4 overflow-x-auto">
@@ -659,7 +653,6 @@
             `;
         }
 
-        // ==================== DELIVERY CHALLAN VIEW ====================
         function renderDeliveryChallanView(container) {
             container.innerHTML = `
                 <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border p-8 space-y-6" id="printable-challan">
@@ -692,7 +685,6 @@
             `;
         }
 
-        // ==================== MASTER SETUP VIEWS ====================
         function renderMasterItemsView(container) {
             container.innerHTML = `<div class="bg-white rounded-2xl p-6 shadow-sm border"><h3 class="font-bold text-lg">Item Master Management</h3><p class="text-sm text-slate-500 mt-1">Categories and items configured.</p></div>`;
         }
