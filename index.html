@@ -1270,24 +1270,25 @@
 
         // ==================== 5. CATEGORIES & ITEM MASTER ====================
         let itemMasterFilterCatId = '';
-        let selectedImportCategoryId = '';
+        let importCompletedForCategory = false;
 
         function renderMasterItemsView(container) {
             if (state.categories.length > 0) {
                 if (!itemMasterFilterCatId || !state.categories.some(c => c.id === itemMasterFilterCatId)) {
                     itemMasterFilterCatId = state.categories[0].id;
+                    importCompletedForCategory = false;
                 }
-                selectedImportCategoryId = itemMasterFilterCatId;
             } else {
                 itemMasterFilterCatId = '';
-                selectedImportCategoryId = '';
+                importCompletedForCategory = false;
             }
 
             const filteredItems = itemMasterFilterCatId 
                 ? state.items.filter(i => i.categoryId === itemMasterFilterCatId)
                 : [];
 
-            const currentCatName = state.categories.find(c => c.id === itemMasterFilterCatId)?.name || 'No Category Selected';
+            const currentCat = state.categories.find(c => c.id === itemMasterFilterCatId);
+            const currentCatName = currentCat ? currentCat.name : 'No Category Selected';
 
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
@@ -1332,31 +1333,34 @@
                                     <h3 class="font-bold text-lg">Item Master Management</h3>
                                     <p class="text-xs text-slate-500">View and manage items strictly per category</p>
                                 </div>
-                                <select id="filter-cat-select" onchange="itemMasterFilterCatId = this.value; selectedImportCategoryId = this.value; renderMasterItemsView(document.getElementById('main-content'))" class="px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold text-blue-700">
+                                <select id="filter-cat-select" onchange="onCategoryDropdownChange(this.value)" class="px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold text-blue-700">
                                     ${state.categories.length === 0 ? `<option value="">No Categories Available</option>` : ''}
                                     ${state.categories.map(c => `<option value="${c.id}" ${c.id === itemMasterFilterCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
                                 </select>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
-                                <button onclick="refreshItemMasterView()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm" title="Refresh/Reset View">
+                                <button onclick="refreshItemMasterView()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm" title="Clear and Reset View">
                                     <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Refresh
                                 </button>
                                 <button onclick="deleteSelectedItems()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Selected
                                 </button>
                                 <button onclick="openItemModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Item</button>
-                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer">
-                                    Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'items')">
+                                
+                                <!-- Import Button: Disabled if import already completed for this active category session -->
+                                <label class="px-4 py-2 ${importCompletedForCategory ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-65' : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-sm'} font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
+                                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> ${importCompletedForCategory ? 'Imported (Locked)' : 'Import Excel'}
+                                    <input type="file" accept=".xlsx, .xls, .csv" ${importCompletedForCategory ? 'disabled' : ''} class="hidden" onchange="importExcelData(event, 'items')">
                                 </label>
                             </div>
                         </div>
 
-                        <!-- Import Category Target Banner -->
+                        <!-- Active Category & Import Banner -->
                         <div class="flex items-center justify-between bg-blue-50/70 p-3 rounded-xl border border-blue-100 text-xs">
                             <span class="font-bold text-blue-900 flex items-center gap-1.5">
-                                <i data-lucide="info" class="w-4 h-4 text-blue-600"></i> Active Category & Excel Import Target: <span class="text-blue-700 font-extrabold text-sm underline">${escapeHtml(currentCatName)}</span>
+                                <i data-lucide="info" class="w-4 h-4 text-blue-600"></i> Active Category & Import Target: <span class="text-blue-700 font-extrabold text-sm underline">${escapeHtml(currentCatName)}</span>
                             </span>
-                            <span class="text-slate-500 font-medium">New imported or manual items will be assigned exclusively to this category.</span>
+                            <span class="text-slate-500 font-medium">${importCompletedForCategory ? 'Import locked for this category. Click "Refresh" to choose another category.' : 'Ready to import items exclusively into this category.'}</span>
                         </div>
 
                         <table class="w-full text-left text-sm border">
@@ -1374,7 +1378,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${filteredItems.length === 0 ? `<tr><td colspan="7" class="p-8 text-center text-slate-400 font-medium">No items found in <strong>${escapeHtml(currentCatName)}</strong>. Select another category or import items.</td></tr>` :
+                                ${filteredItems.length === 0 ? `<tr><td colspan="7" class="p-8 text-center text-slate-400 font-medium">No items found in <strong>${escapeHtml(currentCatName)}</strong>. Choose another category or import items.</td></tr>` :
                                     filteredItems.map((it, idx) => {
                                         const cat = state.categories.find(c => c.id === it.categoryId);
                                         return `
@@ -1401,13 +1405,21 @@
             `;
         }
 
+        window.onCategoryDropdownChange = function(newCatId) {
+            itemMasterFilterCatId = newCatId;
+            importCompletedForCategory = false; // Reset lock when switching category
+            renderMasterItemsView(document.getElementById('main-content'));
+            const selectedCat = state.categories.find(c => c.id === newCatId);
+            showToast(`Switched to category: ${selectedCat ? selectedCat.name : ''}. Import unlocked.`, 'info');
+        };
+
         window.refreshItemMasterView = function() {
+            importCompletedForCategory = false;
             if (state.categories.length > 0) {
                 itemMasterFilterCatId = state.categories[0].id;
-                selectedImportCategoryId = state.categories[0].id;
             }
             renderMasterItemsView(document.getElementById('main-content'));
-            showToast('Item Master view refreshed successfully!', 'info');
+            showToast('Item Master view refreshed and cleared for new category choice!', 'info');
         };
 
         window.toggleSelectAll = function(className, isChecked) {
@@ -1462,7 +1474,7 @@
             if (state.categories.length === 0) {
                 return showToast('Please create at least one category before adding items!', 'error');
             }
-            const item = id ? state.items.find(i => i.id === id) : { id: 'ITM-' + Date.now(), code: '', name: '', unit: 'PCS', categoryId: selectedImportCategoryId || state.categories[0].id };
+            const item = id ? state.items.find(i => i.id === id) : { id: 'ITM-' + Date.now(), code: '', name: '', unit: 'PCS', categoryId: itemMasterFilterCatId || state.categories[0].id };
             openModal({
                 title: id ? 'Edit Item' : 'Add Item',
                 bodyHtml: `
@@ -1931,7 +1943,7 @@
             return /^\d+$/.test(str);
         }
 
-        window.importExcelData = function(event, colName) {
+        window.importExcelData = async function(event, colName) {
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -1960,8 +1972,8 @@
                                 count++;
                             }
                         } else if (colName === 'items') {
-                            if (!selectedImportCategoryId) {
-                                return showToast('Please select a Target Category for the imported items first!', 'error');
+                            if (!itemMasterFilterCatId) {
+                                return showToast('Please select a Target Category first!', 'error');
                             }
                             let offset = (cells.length >= 3 && isSerialNumber(cells[0])) ? 1 : 0;
                             const code = cells[offset] || '';
@@ -1975,7 +1987,7 @@
                                 code: code || ('ITM-' + (i + 1)),
                                 name: name || code,
                                 unit: unit || 'PCS',
-                                categoryId: selectedImportCategoryId
+                                categoryId: itemMasterFilterCatId
                             };
                             await dbSaveRecord('items', rec);
                             count++;
@@ -2018,7 +2030,10 @@
 
                     event.target.value = '';
                     if (count > 0) {
-                        showToast(`Successfully imported ${count} records!`, 'success');
+                        if (colName === 'items') {
+                            importCompletedForCategory = true; // Lock import button for this category session until refresh or category change
+                        }
+                        showToast(`Successfully imported ${count} records into the selected category!`, 'success');
                     } else {
                         showToast('No valid rows found in the Excel file.', 'warning');
                     }
