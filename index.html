@@ -136,7 +136,7 @@
                 <div id="db-status-btn" class="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700/80 text-xs">
                     <span class="flex items-center gap-2 min-w-0">
                         <span id="db-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                        <span id="db-status-text" class="font-medium text-slate-200 truncate">Firebase: kty-store-order</span>
+                        <span id="db-status-text" class="font-medium text-slate-200 truncate">Firebase: kty-store-order-cf0ae</span>
                     </span>
                     <button onclick="resetDemoData()" title="Re-seed Default Data" class="p-1 text-slate-400 hover:text-white rounded transition shrink-0">
                         <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
@@ -192,13 +192,13 @@
         } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
         const firebaseConfig = {
-            apiKey: "AIzaSyARVhYpatrpllPch6XJPKumXhJVvCUAzIA",
-            authDomain: "kty-store-order.firebaseapp.com",
-            projectId: "kty-store-order",
-            storageBucket: "kty-store-order.firebasestorage.app",
-            messagingSenderId: "340295086859",
-            appId: "1:340295086859:web:737eab78ed9a9c1aab280e",
-            measurementId: "G-C9VKBLLLM3"
+            apiKey: "AIzaSyCw7brFS62KnSPy7m6Pfpj34A24NXA5qv8",
+            authDomain: "kty-store-order-cf0ae.firebaseapp.com",
+            projectId: "kty-store-order-cf0ae",
+            storageBucket: "kty-store-order-cf0ae.firebasestorage.app",
+            messagingSenderId: "567340585940",
+            appId: "1:567340585940:web:cfd8de452dc562ec217c41",
+            measurementId: "G-NH25J77GLR"
         };
 
         const firebaseApp = initializeApp(firebaseConfig);
@@ -268,7 +268,7 @@
             ]
         };
 
-        const STORAGE_KEY = 'kty_store_order_cache_v3';
+        const STORAGE_KEY = 'kty_store_order_cache_v4';
         let state = JSON.parse(JSON.stringify(DEFAULT_DATA));
 
         function loadFromLocalStorage() {
@@ -326,6 +326,13 @@
                 await deleteDoc(doc(firestoreDb, colName, id));
             } catch (e) {}
         }
+
+        window.resetDemoData = async function() {
+            state = JSON.parse(JSON.stringify(DEFAULT_DATA));
+            saveToLocalStorage();
+            showToast('Default data re-seeded successfully!', 'success');
+            renderCurrentRoute();
+        };
 
         window.showToast = function(message, type = 'success') {
             const container = document.getElementById('toast-container');
@@ -692,7 +699,7 @@
             container.innerHTML = `<div class="bg-white rounded-2xl p-6 shadow-sm border"><h3 class="font-bold text-lg">Branches & Destinations</h3><p class="text-sm text-slate-500 mt-1">Manage branches and warehouses.</p></div>`;
         }
         function renderMasterUsersView(container) {
-            container.innerHTML = `<div class="bg-white rounded-2xl p-6 shadow-sm border"><h3 class="font-bold text-lg">User Accounts Management</h3><p class="text-sm text-slate-500 mt-1">Manage system user credentials.</p></div>`;
+            container.innerHTML = `<div class="bg-white rounded-2xl p-6 shadow-sm border"><h3 class="font-bold text-lg">User Accounts Management</h3><p class="text-sm text-slate-500 md:mt-1">Manage system user credentials.</p></div>`;
         }
 
         window.addEventListener('DOMContentLoaded', () => {
