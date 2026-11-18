@@ -8,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- SheetJS (xlsx) for Excel Export -->
+    <!-- SheetJS (xlsx) for Excel Export & Import -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- jsPDF & AutoTable for PDF Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -96,13 +96,11 @@
 
             <div class="mt-6 p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs text-slate-600 space-y-1.5">
                 <div class="font-bold text-slate-800 flex items-center gap-1.5">
-                    <i data-lucide="info" class="w-3.5 h-3.5 text-blue-600"></i> Universal Login Enabled (Click any to fill)
+                    <i data-lucide="info" class="w-3.5 h-3.5 text-blue-600"></i> Universal Login Enabled
                 </div>
                 <div class="grid grid-cols-2 gap-1 pt-1">
                     <button type="button" onclick="quickFillLogin('admin')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">admin</span> (Full Access)</button>
-                    <button type="button" onclick="quickFillLogin('branch1')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">branch1</span> (Gulshan)</button>
-                    <button type="button" onclick="quickFillLogin('branch2')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">branch2</span> (Banani)</button>
-                    <button type="button" onclick="quickFillLogin('factory')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">factory</span> (Factory)</button>
+                    <button type="button" onclick="quickFillLogin('branch1')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">branch1</span> (Branch)</button>
                 </div>
             </div>
         </div>
@@ -136,9 +134,9 @@
                 <div id="db-status-btn" class="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700/80 text-xs">
                     <span class="flex items-center gap-2 min-w-0">
                         <span id="db-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                        <span id="db-status-text" class="font-medium text-slate-200 truncate">Firebase: kty-store-order-cf0ae</span>
+                        <span id="db-status-text" class="font-medium text-slate-200 truncate">Firebase Connected</span>
                     </span>
-                    <button onclick="resetDemoData()" title="Re-seed Default Data" class="p-1 text-slate-400 hover:text-white rounded transition shrink-0">
+                    <button onclick="resetDemoData()" title="Reset All Data" class="p-1 text-slate-400 hover:text-white rounded transition shrink-0">
                         <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                     </button>
                 </div>
@@ -157,7 +155,6 @@
 
         <!-- Main Workspace Content -->
         <main class="flex-1 flex flex-col min-w-0">
-            <!-- Top Header Bar -->
             <header class="no-print bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-20">
                 <div>
                     <h2 id="page-title" class="text-xl font-bold text-slate-900">Dashboard</h2>
@@ -171,7 +168,6 @@
                 </div>
             </header>
 
-            <!-- Dynamic View Container -->
             <div id="main-content" class="flex-1 p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden"></div>
         </main>
     </div>
@@ -186,9 +182,7 @@
             doc,
             setDoc,
             getDocs,
-            deleteDoc,
-            onSnapshot,
-            writeBatch
+            deleteDoc
         } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -209,67 +203,20 @@
         const TODAY = new Date().toISOString().split('T')[0];
         const TOMORROW = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
-        const DEFAULT_DATA = {
-            branches: [
-                { id: 'BR-01', name: 'Branch 1 - Gulshan', code: 'GUL', address: 'House 42, Road 11, Gulshan-1' },
-                { id: 'BR-02', name: 'Branch 2 - Banani', code: 'BAN', address: 'Plot 18, Block E, Banani' },
-                { id: 'BR-03', name: 'Branch 3 - Dhanmondi', code: 'DHA', address: 'Road 27, Dhanmondi' }
-            ],
-            destinations: [
-                { id: 'DST-01', name: 'Factory', type: 'Factory' },
-                { id: 'DST-02', name: 'Warehouse', type: 'Warehouse' },
-                { id: 'DST-03', name: 'Frozen Warehouse', type: 'Frozen Warehouse' }
-            ],
-            categories: [
-                { id: 'CAT-01', name: 'Bakery & Pastry' },
-                { id: 'CAT-02', name: 'Frozen Meat & Poultry' },
-                { id: 'CAT-03', name: 'Sauces & Marinades' },
-                { id: 'CAT-04', name: 'Dry Grocery & Packaging' }
-            ],
-            items: [
-                { id: 'ITM-01', code: 'BAK-101', name: 'Artisan Burger Buns (Pack of 12)', unit: 'PACK', categoryId: 'CAT-01' },
-                { id: 'ITM-02', code: 'BAK-102', name: 'Butter Croissant Dough', unit: 'PCS', categoryId: 'CAT-01' },
-                { id: 'ITM-03', code: 'BAK-103', name: 'Focaccia Loaf 500g', unit: 'PCS', categoryId: 'CAT-01' },
-                { id: 'ITM-04', code: 'BAK-104', name: 'Chocolate Fudge Brownie Tray', unit: 'TRAY', categoryId: 'CAT-01' },
-                { id: 'ITM-05', code: 'FRZ-201', name: 'Marinated Chicken Breast Fillet', unit: 'KG', categoryId: 'CAT-02' },
-                { id: 'ITM-06', code: 'FRZ-202', name: 'Premium Beef Burger Patties', unit: 'KG', categoryId: 'CAT-02' },
-                { id: 'ITM-07', code: 'FRZ-203', name: 'Crispy French Fries 2.5kg', unit: 'BAG', categoryId: 'CAT-02' },
-                { id: 'ITM-08', code: 'FRZ-204', name: 'Breaded Chicken Tenders', unit: 'KG', categoryId: 'CAT-02' },
-                { id: 'ITM-09', code: 'SAU-301', name: 'Signature House Burger Sauce', unit: 'LTR', categoryId: 'CAT-03' },
-                { id: 'ITM-10', code: 'SAU-302', name: 'Spicy Peri-Peri Marinade', unit: 'LTR', categoryId: 'CAT-03' },
-                { id: 'ITM-11', code: 'SAU-303', name: 'Classic Garlic Aioli', unit: 'KG', categoryId: 'CAT-03' },
-                { id: 'ITM-12', code: 'SAU-304', name: 'Smoky BBQ Glaze', unit: 'LTR', categoryId: 'CAT-03' },
-                { id: 'ITM-13', code: 'DRY-401', name: 'Takeaway Kraft Meal Box', unit: 'PCS', categoryId: 'CAT-04' },
-                { id: 'ITM-14', code: 'DRY-402', name: 'Branded Paper Napkins (500s)', unit: 'PACK', categoryId: 'CAT-04' },
-                { id: 'ITM-15', code: 'DRY-403', name: 'Extra Virgin Olive Oil', unit: 'LTR', categoryId: 'CAT-04' },
-                { id: 'ITM-16', code: 'DRY-404', name: 'Sea Salt Flakes', unit: 'KG', categoryId: 'CAT-04' }
-            ],
+        // Clean initial state (Old default demo items cleared as requested)
+        const CLEAN_DEFAULT_DATA = {
+            branches: [],
+            destinations: [],
+            categories: [],
+            items: [],
             users: [
-                { id: 'USR-01', username: 'admin', password: '1234', fullName: 'System Administrator', role: 'admin', branchId: '', destinationId: '' },
-                { id: 'USR-02', username: 'factory', password: '1234', fullName: 'Factory Production Head', role: 'factory_warehouse', branchId: '', destinationId: 'DST-01' },
-                { id: 'USR-03', username: 'warehouse', password: '1234', fullName: 'Warehouse Storekeeper', role: 'factory_warehouse', branchId: '', destinationId: 'DST-02' },
-                { id: 'USR-04', username: 'branch1', password: '1234', fullName: 'Gulshan Branch Manager', role: 'branch', branchId: 'BR-01', destinationId: '' },
-                { id: 'USR-05', username: 'branch2', password: '1234', fullName: 'Banani Branch Manager', role: 'branch', branchId: 'BR-02', destinationId: '' },
-                { id: 'USR-06', username: 'branch3', password: '1234', fullName: 'Dhanmondi Branch Manager', role: 'branch', branchId: 'BR-03', destinationId: '' }
+                { id: 'USR-01', username: 'admin', password: '1234', fullName: 'System Administrator', role: 'admin', branchId: '', destinationId: '' }
             ],
-            orders: [
-                {
-                    id: 'ORD-SEED-1',
-                    branchId: 'BR-01',
-                    branchName: 'Branch 1 - Gulshan',
-                    destinationId: 'DST-01',
-                    destinationName: 'Factory',
-                    requestDate: TODAY,
-                    deliveryDate: TOMORROW,
-                    status: 'Submitted',
-                    quantities: { 'ITM-01': 15, 'ITM-02': 40, 'ITM-03': 10, 'ITM-09': 12, 'ITM-10': 8 },
-                    updatedAt: new Date().toISOString()
-                }
-            ]
+            orders: []
         };
 
-        const STORAGE_KEY = 'kty_store_order_cache_v4';
-        let state = JSON.parse(JSON.stringify(DEFAULT_DATA));
+        const STORAGE_KEY = 'kty_store_order_cache_v5';
+        let state = JSON.parse(JSON.stringify(CLEAN_DEFAULT_DATA));
 
         function loadFromLocalStorage() {
             const raw = localStorage.getItem(STORAGE_KEY);
@@ -277,12 +224,12 @@
                 try {
                     const parsed = JSON.parse(raw);
                     state = {
-                        branches: parsed.branches || DEFAULT_DATA.branches,
-                        destinations: parsed.destinations || DEFAULT_DATA.destinations,
-                        categories: parsed.categories || DEFAULT_DATA.categories,
-                        items: parsed.items || DEFAULT_DATA.items,
-                        users: parsed.users || DEFAULT_DATA.users,
-                        orders: parsed.orders || DEFAULT_DATA.orders
+                        branches: parsed.branches || [],
+                        destinations: parsed.destinations || [],
+                        categories: parsed.categories || [],
+                        items: parsed.items || [],
+                        users: parsed.users || CLEAN_DEFAULT_DATA.users,
+                        orders: parsed.orders || []
                     };
                 } catch (e) {}
             }
@@ -328,9 +275,9 @@
         }
 
         window.resetDemoData = async function() {
-            state = JSON.parse(JSON.stringify(DEFAULT_DATA));
+            state = JSON.parse(JSON.stringify(CLEAN_DEFAULT_DATA));
             saveToLocalStorage();
-            showToast('Default data re-seeded successfully!', 'success');
+            showToast('All data cleared/reset successfully!', 'info');
             renderCurrentRoute();
         };
 
@@ -387,8 +334,8 @@
                     username: uname || 'admin',
                     password: '1234',
                     fullName: uname ? (uname.charAt(0).toUpperCase() + uname.slice(1) + ' User') : 'System Admin',
-                    role: uname.includes('factory') ? 'factory_warehouse' : (uname.includes('branch') ? 'branch' : 'admin'),
-                    branchId: uname.includes('branch1') ? 'BR-01' : (uname.includes('branch2') ? 'BR-02' : 'BR-01'),
+                    role: uname.includes('branch') ? 'branch' : 'admin',
+                    branchId: '',
                     destinationId: ''
                 };
             }
@@ -421,7 +368,7 @@
                 { id: 'delivery-challan', label: 'Delivery Challan & Print', icon: 'printer' },
                 { id: 'master-items', label: 'Categories & Item Master', icon: 'package' },
                 { id: 'master-locations', label: 'Branches & Destinations', icon: 'building-2' },
-                { id: 'master-users', label: 'User Accounts', icon: 'users' }
+                { id: 'master-users', label: 'User Accounts & Roles', icon: 'users' }
             ];
 
             nav.innerHTML = items.map(item => `
@@ -451,10 +398,11 @@
             lucide.createIcons();
         }
 
+        // ==================== 1. STOCK TRANSFER ORDER FORM ====================
         let orderFormState = {
             isActive: false,
-            branchId: 'BR-01',
-            destinationId: 'DST-01',
+            branchId: '',
+            destinationId: '',
             requestDate: TODAY,
             deliveryDate: TOMORROW,
             catIdx: 0,
@@ -464,7 +412,7 @@
         function renderOrderFormView(container) {
             const cats = state.categories;
             const activeCat = cats[orderFormState.catIdx] || cats[0];
-            const items = state.items.filter(i => i.categoryId === activeCat?.id);
+            const items = activeCat ? state.items.filter(i => i.categoryId === activeCat.id) : [];
 
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
@@ -475,20 +423,22 @@
                             </span>
                             <div class="flex gap-2">
                                 <button onclick="activateOrderForm()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm">Add</button>
-                                <button onclick="suspendOrderForm()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm">Suspend</button>
-                                <button onclick="saveOrderForm()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md">Save</button>
+                                <button onclick="cancelOrderForm()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-sm">Cancel</button>
+                                <button onclick="saveOrderForm()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md">Save & Submit</button>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Branch</label>
                                 <select id="f-branch" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
+                                    <option value="">Select Branch...</option>
                                     ${state.branches.map(b => `<option value="${b.id}" ${b.id === orderFormState.branchId ? 'selected' : ''}>${b.name}</option>`).join('')}
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-500 mb-1">To Destination</label>
                                 <select id="f-dest" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
+                                    <option value="">Select Destination...</option>
                                     ${state.destinations.map(d => `<option value="${d.id}" ${d.id === orderFormState.destinationId ? 'selected' : ''}>${d.name}</option>`).join('')}
                                 </select>
                             </div>
@@ -504,49 +454,56 @@
                     </div>
 
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
-                        <div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl">
-                            <select id="f-cat" class="px-4 py-2 bg-white border rounded-xl text-sm font-bold">
-                                ${cats.map((c, i) => `<option value="${i}" ${i === orderFormState.catIdx ? 'selected' : ''}>${c.name}</option>`).join('')}
-                            </select>
-                            <div class="flex gap-2">
-                                <button onclick="changeCat(-1)" class="px-3 py-1.5 bg-white border rounded-lg text-sm font-bold">Previous</button>
-                                <button onclick="changeCat(1)" class="px-3 py-1.5 bg-white border rounded-lg text-sm font-bold">Next</button>
+                        ${cats.length === 0 ? `
+                            <div class="p-8 text-center text-slate-500 bg-slate-50 rounded-xl">
+                                <p class="font-bold">No categories or items found.</p>
+                                <p class="text-xs mt-1">Please add categories and items in the Master section or import via Excel first.</p>
                             </div>
-                        </div>
+                        ` : `
+                            <div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl">
+                                <select id="f-cat" class="px-4 py-2 bg-white border rounded-xl text-sm font-bold">
+                                    ${cats.map((c, i) => `<option value="${i}" ${i === orderFormState.catIdx ? 'selected' : ''}>${c.name}</option>`).join('')}
+                                </select>
+                                <div class="flex gap-2">
+                                    <button onclick="changeCat(-1)" class="px-3 py-1.5 bg-white border rounded-lg text-sm font-bold">Previous</button>
+                                    <button onclick="changeCat(1)" class="px-3 py-1.5 bg-white border rounded-lg text-sm font-bold">Next</button>
+                                </div>
+                            </div>
 
-                        <div class="overflow-x-auto border rounded-xl">
-                            <table class="w-full text-left">
-                                <thead class="bg-slate-100 text-xs font-bold text-slate-600 uppercase">
-                                    <tr>
-                                        <th class="py-3 px-4">Code</th>
-                                        <th class="py-3 px-4">Item Name</th>
-                                        <th class="py-3 px-4">Unit</th>
-                                        <th class="py-3 px-4 text-right">Quantity</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y text-sm">
-                                    ${items.map(it => `
+                            <div class="overflow-x-auto border rounded-xl">
+                                <table class="w-full text-left">
+                                    <thead class="bg-slate-100 text-xs font-bold text-slate-600 uppercase">
                                         <tr>
-                                            <td class="py-3 px-4 font-mono font-bold">${it.code}</td>
-                                            <td class="py-3 px-4 font-semibold">${it.name}</td>
-                                            <td class="py-3 px-4"><span class="px-2 py-0.5 bg-slate-100 text-xs font-bold rounded">${it.unit}</span></td>
-                                            <td class="py-3 px-4 text-right">
-                                                <input type="number" min="0" data-item="${it.id}" ${!orderFormState.isActive ? 'disabled' : ''} value="${orderFormState.quantities[it.id] || ''}" oninput="updateQty('${it.id}', this.value)" class="w-28 px-3 py-1.5 text-right border rounded-xl font-bold">
-                                            </td>
+                                            <th class="py-3 px-4">Code</th>
+                                            <th class="py-3 px-4">Item Name</th>
+                                            <th class="py-3 px-4">Unit</th>
+                                            <th class="py-3 px-4 text-right">Quantity</th>
                                         </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
+                                    </thead>
+                                    <tbody class="divide-y text-sm">
+                                        ${items.map(it => `
+                                            <tr>
+                                                <td class="py-3 px-4 font-mono font-bold">${it.code}</td>
+                                                <td class="py-3 px-4 font-semibold">${it.name}</td>
+                                                <td class="py-3 px-4"><span class="px-2 py-0.5 bg-slate-100 text-xs font-bold rounded">${it.unit}</span></td>
+                                                <td class="py-3 px-4 text-right">
+                                                    <input type="number" min="0" data-item="${it.id}" ${!orderFormState.isActive ? 'disabled' : ''} value="${orderFormState.quantities[it.id] || ''}" oninput="updateQty('${it.id}', this.value)" class="w-28 px-3 py-1.5 text-right border rounded-xl font-bold">
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `}
                     </div>
                 </div>
             `;
 
-            document.getElementById('f-branch').onchange = e => orderFormState.branchId = e.target.value;
-            document.getElementById('f-dest').onchange = e => orderFormState.destinationId = e.target.value;
-            document.getElementById('f-req').onchange = e => orderFormState.requestDate = e.target.value;
-            document.getElementById('f-del').onchange = e => orderFormState.deliveryDate = e.target.value;
-            document.getElementById('f-cat').onchange = e => {
+            if(document.getElementById('f-branch')) document.getElementById('f-branch').onchange = e => orderFormState.branchId = e.target.value;
+            if(document.getElementById('f-dest')) document.getElementById('f-dest').onchange = e => orderFormState.destinationId = e.target.value;
+            if(document.getElementById('f-req')) document.getElementById('f-req').onchange = e => orderFormState.requestDate = e.target.value;
+            if(document.getElementById('f-del')) document.getElementById('f-del').onchange = e => orderFormState.deliveryDate = e.target.value;
+            if(document.getElementById('f-cat')) document.getElementById('f-cat').onchange = e => {
                 orderFormState.catIdx = parseInt(e.target.value);
                 renderOrderFormView(container);
             };
@@ -556,6 +513,13 @@
             orderFormState.isActive = true;
             renderOrderFormView(document.getElementById('main-content'));
             showToast('Form activated for new entry!', 'success');
+        };
+
+        window.cancelOrderForm = function() {
+            orderFormState.isActive = false;
+            orderFormState.quantities = {};
+            renderOrderFormView(document.getElementById('main-content'));
+            showToast('Order entry cancelled and locked.', 'info');
         };
 
         window.updateQty = function(itemId, val) {
@@ -570,6 +534,8 @@
         };
 
         window.saveOrderForm = async function() {
+            if (!orderFormState.branchId) return showToast('Please select a branch!', 'error');
+            if (!orderFormState.destinationId) return showToast('Please select a destination!', 'error');
             if (Object.keys(orderFormState.quantities).length === 0) {
                 return showToast('Please enter at least one quantity!', 'error');
             }
@@ -581,7 +547,7 @@
                 branchId: orderFormState.branchId,
                 branchName: branch ? branch.name : 'Branch',
                 destinationId: orderFormState.destinationId,
-                destinationName: dest ? dest.name : 'Factory',
+                destinationName: dest ? dest.name : 'Destination',
                 requestDate: orderFormState.requestDate,
                 deliveryDate: orderFormState.deliveryDate,
                 status: 'Submitted',
@@ -595,11 +561,7 @@
             navigateTo('my-orders');
         };
 
-        window.suspendOrderForm = async function() {
-            showToast('Order suspended as draft.', 'warning');
-            orderFormState.isActive = false;
-        };
-
+        // ==================== 2. BRANCH ORDER HISTORY ====================
         function renderBranchHistoryView(container) {
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto bg-white rounded-2xl shadow-sm border p-6 space-y-4">
@@ -615,21 +577,23 @@
                             </tr>
                         </thead>
                         <tbody class="divide-y">
-                            ${state.orders.map(o => `
-                                <tr>
-                                    <td class="p-3 font-mono font-bold">${o.id}</td>
-                                    <td class="p-3 font-semibold">${o.branchName}</td>
-                                    <td class="p-3">${o.destinationName}</td>
-                                    <td class="p-3">${o.deliveryDate}</td>
-                                    <td class="p-3"><span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold rounded text-xs">${o.status}</span></td>
-                                </tr>
-                            `).join('')}
+                            ${state.orders.length === 0 ? `<tr><td colspan="5" class="p-6 text-center text-slate-400">No orders submitted yet.</td></tr>` : 
+                                state.orders.map(o => `
+                                    <tr>
+                                        <td class="p-3 font-mono font-bold">${o.id}</td>
+                                        <td class="p-3 font-semibold">${o.branchName}</td>
+                                        <td class="p-3">${o.destinationName}</td>
+                                        <td class="p-3">${o.deliveryDate}</td>
+                                        <td class="p-3"><span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold rounded text-xs">${o.status}</span></td>
+                                    </tr>
+                                `).join('')}
                         </tbody>
                     </table>
                 </div>
             `;
         }
 
+        // ==================== 3. CONSOLIDATED ORDER MATRIX ====================
         function renderOrderMatrixView(container) {
             container.innerHTML = `
                 <div class="bg-white rounded-2xl shadow-sm border p-6 space-y-4 overflow-x-auto">
@@ -640,50 +604,373 @@
                                 <th class="p-3 border">Code</th>
                                 <th class="p-3 border">Item Name</th>
                                 ${state.branches.map(b => `<th class="p-3 border text-center">${b.name}</th>`).join('')}
+                                <th class="p-3 border text-center bg-blue-50 text-blue-700">Total Order</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
-                            ${state.items.map(it => `
-                                <tr>
-                                    <td class="p-3 border font-mono font-bold">${it.code}</td>
-                                    <td class="p-3 border font-semibold">${it.name}</td>
-                                    ${state.branches.map(b => {
-                                        const ord = state.orders.find(o => o.branchId === b.id);
-                                        const q = ord?.quantities?.[it.id] || 0;
-                                        return `<td class="p-3 border text-center font-bold">${q > 0 ? q : '-'}</td>`;
-                                    }).join('')}
-                                </tr>
-                            `).join('')}
+                            ${state.items.length === 0 ? `<tr><td colspan="${3 + state.branches.length}" class="p-6 text-center text-slate-400">No items available. Add items in Master Items.</td></tr>` :
+                                state.items.map(it => {
+                                    let rowTotal = 0;
+                                    return `
+                                        <tr>
+                                            <td class="p-3 border font-mono font-bold">${it.code}</td>
+                                            <td class="p-3 border font-semibold">${it.name}</td>
+                                            ${state.branches.map(b => {
+                                                const ord = state.orders.find(o => o.branchId === b.id);
+                                                const q = ord?.quantities?.[it.id] || 0;
+                                                rowTotal += q;
+                                                return `<td class="p-3 border text-center font-bold">${q > 0 ? q : '-'}</td>`;
+                                            }).join('')}
+                                            <td class="p-3 border text-center font-black bg-blue-50/50 text-blue-700">${rowTotal > 0 ? rowTotal : '-'}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
                         </tbody>
                     </table>
                 </div>
             `;
         }
+
+        // ==================== 4. DELIVERY CHALLAN & PRINT ====================
+        let challanBranchId = '';
+        let challanDate = TODAY;
 
         function renderDeliveryChallanView(container) {
+            const filteredOrders = state.orders.filter(o => {
+                let matchBranch = !challanBranchId || o.branchId === challanBranchId;
+                let matchDate = !challanDate || o.deliveryDate === challanDate;
+                return matchBranch && matchDate;
+            });
+
             container.innerHTML = `
-                <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border p-8 space-y-6" id="printable-challan">
-                    <div class="flex justify-between border-b pb-4">
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <div class="no-print bg-white rounded-2xl p-6 shadow-sm border flex flex-wrap gap-4 items-end">
                         <div>
-                            <h2 class="text-2xl font-black">DELIVERY CHALLAN</h2>
-                            <p class="text-xs text-slate-500">Stock Transfer Dispatch Note</p>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Select Branch</label>
+                            <select id="challan-branch" class="px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold w-60">
+                                <option value="">-- All Branches --</option>
+                                ${state.branches.map(b => `<option value="${b.id}" ${b.id === challanBranchId ? 'selected' : ''}>${b.name}</option>`).join('')}
+                            </select>
                         </div>
-                        <button onclick="window.print()" class="no-print px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Print Challan</button>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Delivery Date</label>
+                            <input type="date" id="challan-date" value="${challanDate}" class="px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
+                        </div>
+                        <button onclick="window.print()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md flex items-center gap-2">
+                            <i data-lucide="printer" class="w-4 h-4"></i> Print Challan
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-sm border p-8 space-y-6" id="printable-challan">
+                        <div class="flex justify-between border-b pb-4">
+                            <div>
+                                <h2 class="text-2xl font-black">DELIVERY CHALLAN</h2>
+                                <p class="text-xs text-slate-500">Stock Transfer Dispatch Note</p>
+                            </div>
+                            <div class="text-right text-xs text-slate-600">
+                                <p><strong>Dispatch Date:</strong> ${challanDate}</p>
+                                <p><strong>Branch Filter:</strong> ${challanBranchId ? (state.branches.find(b=>b.id===challanBranchId)?.name || '') : 'All Branches'}</p>
+                            </div>
+                        </div>
+                        <table class="w-full text-left text-sm border">
+                            <thead>
+                                <tr class="bg-slate-100 font-bold text-xs">
+                                    <th class="p-2.5 border">Code</th>
+                                    <th class="p-2.5 border">Item Name</th>
+                                    <th class="p-2.5 border">Unit</th>
+                                    <th class="p-2.5 border text-right">Total Requested Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${state.items.map(it => {
+                                    let totalQty = 0;
+                                    filteredOrders.forEach(ord => {
+                                        if (ord.quantities && ord.quantities[it.id]) {
+                                            totalQty += ord.quantities[it.id];
+                                        }
+                                    });
+                                    if (totalQty === 0) return '';
+                                    return `
+                                        <tr>
+                                            <td class="p-2.5 border font-mono">${it.code}</td>
+                                            <td class="p-2.5 border font-semibold">${it.name}</td>
+                                            <td class="p-2.5 border">${it.unit}</td>
+                                            <td class="p-2.5 border text-right font-bold">${totalQty}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            if(document.getElementById('challan-branch')) document.getElementById('challan-branch').onchange = e => {
+                challanBranchId = e.target.value;
+                renderDeliveryChallanView(container);
+            };
+            if(document.getElementById('challan-date')) document.getElementById('challan-date').onchange = e => {
+                challanDate = e.target.value;
+                renderDeliveryChallanView(container);
+            };
+        }
+
+        // ==================== 5. CATEGORIES & ITEM MASTER ====================
+        function renderMasterItemsView(container) {
+            container.innerHTML = `
+                <div class="max-w-5xl mx-auto space-y-6">
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-lg">Categories Management</h3>
+                            <div class="flex gap-2">
+                                <button onclick="openCategoryModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Category</button>
+                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer">
+                                    Import Excel <input type="file" accept=".xlsx, .xls" class="hidden" onchange="importExcelData(event, 'categories')">
+                                </label>
+                            </div>
+                        </div>
+                        <table class="w-full text-left text-sm border">
+                            <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">ID</th><th class="p-3 border">Category Name</th><th class="p-3 border text-right">Actions</th></tr></thead>
+                            <tbody>
+                                ${state.categories.length === 0 ? `<tr><td colspan="3" class="p-4 text-center text-slate-400">No categories found. Add or import via Excel.</td></tr>` :
+                                    state.categories.map(c => `
+                                        <tr>
+                                            <td class="p-3 border font-mono">${c.id}</td>
+                                            <td class="p-3 border font-semibold">${c.name}</td>
+                                            <td class="p-3 border text-right space-x-2">
+                                                <button onclick="openCategoryModal('${c.id}')" class="text-blue-600 font-bold">Edit</button>
+                                                <button onclick="deleteRecord('categories', '${c.id}')" class="text-rose-600 font-bold">Delete</button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-lg">Item Master Management</h3>
+                            <div class="flex gap-2">
+                                <button onclick="openItemModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Item</button>
+                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer">
+                                    Import Excel <input type="file" accept=".xlsx, .xls" class="hidden" onchange="importExcelData(event, 'items')">
+                                </label>
+                            </div>
+                        </div>
+                        <table class="w-full text-left text-sm border">
+                            <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">Code</th><th class="p-3 border">Item Name</th><th class="p-3 border">Unit</th><th class="p-3 border">Category</th><th class="p-3 border text-right">Actions</th></tr></thead>
+                            <tbody>
+                                ${state.items.length === 0 ? `<tr><td colspan="5" class="p-4 text-center text-slate-400">No items found. Add or import via Excel.</td></tr>` :
+                                    state.items.map(it => {
+                                        const cat = state.categories.find(c => c.id === it.categoryId);
+                                        return `
+                                            <tr>
+                                                <td class="p-3 border font-mono">${it.code}</td>
+                                                <td class="p-3 border font-semibold">${it.name}</td>
+                                                <td class="p-3 border">${it.unit}</td>
+                                                <td class="p-3 border">${cat ? cat.name : '-'}</td>
+                                                <td class="p-3 border text-right space-x-2">
+                                                    <button onclick="openItemModal('${it.id}')" class="text-blue-600 font-bold">Edit</button>
+                                                    <button onclick="deleteRecord('items', '${it.id}')" class="text-rose-600 font-bold">Delete</button>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.openCategoryModal = function(id = null) {
+            const cat = id ? state.categories.find(c => c.id === id) : { id: 'CAT-' + Date.now(), name: '' };
+            openModal({
+                title: id ? 'Edit Category' : 'Add Category',
+                bodyHtml: `
+                    <div class="space-y-3">
+                        <label class="block text-xs font-bold uppercase text-slate-500">Category Name</label>
+                        <input type="text" id="m-cat-name" value="${cat.name}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                    </div>
+                `,
+                onConfirm: async () => {
+                    const name = document.getElementById('m-cat-name').value.trim();
+                    if (!name) return showToast('Category name is required', 'error');
+                    cat.name = name;
+                    await dbSaveRecord('categories', cat);
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast('Category saved successfully!');
+                }
+            });
+        };
+
+        window.openItemModal = function(id = null) {
+            const item = id ? state.items.find(i => i.id === id) : { id: 'ITM-' + Date.now(), code: '', name: '', unit: 'PCS', categoryId: state.categories[0]?.id || '' };
+            openModal({
+                title: id ? 'Edit Item' : 'Add Item',
+                bodyHtml: `
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Item Code</label>
+                            <input type="text" id="m-item-code" value="${item.code}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Item Name</label>
+                            <input type="text" id="m-item-name" value="${item.name}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Unit (e.g. PCS, KG, PACK)</label>
+                            <input type="text" id="m-item-unit" value="${item.unit}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Category</label>
+                            <select id="m-item-cat" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                                ${state.categories.map(c => `<option value="${c.id}" ${c.id === item.categoryId ? 'selected' : ''}>${c.name}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                `,
+                onConfirm: async () => {
+                    item.code = document.getElementById('m-item-code').value.trim();
+                    item.name = document.getElementById('m-item-name').value.trim();
+                    item.unit = document.getElementById('m-item-unit').value.trim().toUpperCase();
+                    item.categoryId = document.getElementById('m-item-cat').value;
+                    if (!item.name || !item.code) return showToast('Code and Name are required!', 'error');
+                    await dbSaveRecord('items', item);
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast('Item saved successfully!');
+                }
+            });
+        };
+
+        // ==================== 6. BRANCHES & DESTINATIONS MASTER ====================
+        function renderMasterLocationsView(container) {
+            container.innerHTML = `
+                <div class="max-w-5xl mx-auto space-y-6">
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-lg">Branches Management</h3>
+                            <div class="flex gap-2">
+                                <button onclick="openBranchModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Branch</button>
+                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer">
+                                    Import Excel <input type="file" accept=".xlsx, .xls" class="hidden" onchange="importExcelData(event, 'branches')">
+                                </label>
+                            </div>
+                        </div>
+                        <table class="w-full text-left text-sm border">
+                            <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">Code</th><th class="p-3 border">Branch Name</th><th class="p-3 border">Address</th><th class="p-3 border text-right">Actions</th></tr></thead>
+                            <tbody>
+                                ${state.branches.length === 0 ? `<tr><td colspan="4" class="p-4 text-center text-slate-400">No branches configured. Add or import via Excel.</td></tr>` :
+                                    state.branches.map(b => `
+                                        <tr>
+                                            <td class="p-3 border font-mono">${b.code}</td>
+                                            <td class="p-3 border font-semibold">${b.name}</td>
+                                            <td class="p-3 border">${b.address || '-'}</td>
+                                            <td class="p-3 border text-right space-x-2">
+                                                <button onclick="openBranchModal('${b.id}')" class="text-blue-600 font-bold">Edit</button>
+                                                <button onclick="deleteRecord('branches', '${b.id}')" class="text-rose-600 font-bold">Delete</button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-lg">Destinations Management (Factory & Warehouses)</h3>
+                            <button onclick="openDestinationModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Destination</button>
+                        </div>
+                        <table class="w-full text-left text-sm border">
+                            <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">ID</th><th class="p-3 border">Destination Name</th><th class="p-3 border">Type</th><th class="p-3 border text-right">Actions</th></tr></thead>
+                            <tbody>
+                                ${state.destinations.length === 0 ? `<tr><td colspan="4" class="p-4 text-center text-slate-400">No destinations configured.</td></tr>` :
+                                    state.destinations.map(d => `
+                                        <tr>
+                                            <td class="p-3 border font-mono">${d.id}</td>
+                                            <td class="p-3 border font-semibold">${d.name}</td>
+                                            <td class="p-3 border">${d.type}</td>
+                                            <td class="p-3 border text-right space-x-2">
+                                                <button onclick="openDestinationModal('${d.id}')" class="text-blue-600 font-bold">Edit</button>
+                                                <button onclick="deleteRecord('destinations', '${d.id}')" class="text-rose-600 font-bold">Delete</button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.openBranchModal = function(id = null) {
+            const b = id ? state.branches.find(x => x.id === id) : { id: 'BR-' + Date.now(), name: '', code: '', address: '' };
+            openModal({
+                title: id ? 'Edit Branch' : 'Add Branch',
+                bodyHtml: `
+                    <div class="space-y-3">
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Branch Code</label><input type="text" id="m-b-code" value="${b.code}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Branch Name</label><input type="text" id="m-b-name" value="${b.name}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Address</label><input type="text" id="m-b-addr" value="${b.address}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                    </div>
+                `,
+                onConfirm: async () => {
+                    b.code = document.getElementById('m-b-code').value.trim();
+                    b.name = document.getElementById('m-b-name').value.trim();
+                    b.address = document.getElementById('m-b-addr').value.trim();
+                    if(!b.name || !b.code) return showToast('Name and code are required!', 'error');
+                    await dbSaveRecord('branches', b);
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast('Branch saved successfully!');
+                }
+            });
+        };
+
+        window.openDestinationModal = function(id = null) {
+            const d = id ? state.destinations.find(x => x.id === id) : { id: 'DST-' + Date.now(), name: '', type: 'Warehouse' };
+            openModal({
+                title: id ? 'Edit Destination' : 'Add Destination',
+                bodyHtml: `
+                    <div class="space-y-3">
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Destination Name</label><input type="text" id="m-d-name" value="${d.name}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Type</label><input type="text" id="m-d-type" value="${d.type}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                    </div>
+                `,
+                onConfirm: async () => {
+                    d.name = document.getElementById('m-d-name').value.trim();
+                    d.type = document.getElementById('m-d-type').value.trim();
+                    if(!d.name) return showToast('Name is required!', 'error');
+                    await dbSaveRecord('destinations', d);
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast('Destination saved successfully!');
+                }
+            });
+        };
+
+        // ==================== 7. USER MANAGEMENT & PERMISSIONS ====================
+        function renderMasterUsersView(container) {
+            container.innerHTML = `
+                <div class="max-w-5xl mx-auto bg-white rounded-2xl p-6 shadow-sm border space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-lg">User Accounts & Role Permissions</h3>
+                        <button onclick="openUserModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add New User</button>
                     </div>
                     <table class="w-full text-left text-sm border">
-                        <thead>
-                            <tr class="bg-slate-100 font-bold text-xs">
-                                <th class="p-2.5 border">Code</th>
-                                <th class="p-2.5 border">Item Name</th>
-                                <th class="p-2.5 border text-right">Delivered Qty</th>
-                            </tr>
-                        </thead>
+                        <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">Username</th><th class="p-3 border">Full Name</th><th class="p-3 border">Role / Permission</th><th class="p-3 border text-right">Actions</th></tr></thead>
                         <tbody>
-                            ${state.items.map(it => `
+                            ${state.users.map(u => `
                                 <tr>
-                                    <td class="p-2.5 border font-mono">${it.code}</td>
-                                    <td class="p-2.5 border font-semibold">${it.name}</td>
-                                    <td class="p-2.5 border text-right font-bold">10</td>
+                                    <td class="p-3 border font-mono font-bold">${u.username}</td>
+                                    <td class="p-3 border font-semibold">${u.fullName}</td>
+                                    <td class="p-3 border"><span class="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold text-xs rounded">${u.role}</span></td>
+                                    <td class="p-3 border text-right space-x-2">
+                                        <button onclick="openUserModal('${u.id}')" class="text-blue-600 font-bold">Edit</button>
+                                        ${u.username !== 'admin' ? `<button onclick="deleteRecord('users', '${u.id}')" class="text-rose-600 font-bold">Delete</button>` : ''}
+                                    </td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -692,15 +979,97 @@
             `;
         }
 
-        function renderMasterItemsView(container) {
-            container.innerHTML = `<div class="bg-white rounded-2xl p-6 shadow-sm border"><h3 class="font-bold text-lg">Item Master Management</h3><p class="text-sm text-slate-500 mt-1">Categories and items configured.</p></div>`;
-        }
-        function renderMasterLocationsView(container) {
-            container.innerHTML = `<div class="bg-white rounded-2xl p-6 shadow-sm border"><h3 class="font-bold text-lg">Branches & Destinations</h3><p class="text-sm text-slate-500 mt-1">Manage branches and warehouses.</p></div>`;
-        }
-        function renderMasterUsersView(container) {
-            container.innerHTML = `<div class="bg-white rounded-2xl p-6 shadow-sm border"><h3 class="font-bold text-lg">User Accounts Management</h3><p class="text-sm text-slate-500 md:mt-1">Manage system user credentials.</p></div>`;
-        }
+        window.openUserModal = function(id = null) {
+            const u = id ? state.users.find(x => x.id === id) : { id: 'USR-' + Date.now(), username: '', password: '1234', fullName: '', role: 'branch' };
+            openModal({
+                title: id ? 'Edit User & Permissions' : 'Add User Account',
+                bodyHtml: `
+                    <div class="space-y-3">
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Username</label><input type="text" id="m-u-name" value="${u.username}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Password</label><input type="text" id="m-u-pass" value="${u.password}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Full Name</label><input type="text" id="m-u-full" value="${u.fullName}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Role / Permission</label>
+                            <select id="m-u-role" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                                <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrator (Full Access)</option>
+                                <option value="branch" ${u.role === 'branch' ? 'selected' : ''}>Branch User (Order Submission)</option>
+                                <option value="factory_warehouse" ${u.role === 'factory_warehouse' ? 'selected' : ''}>Factory & Warehouse (Fulfill & Challan)</option>
+                            </select>
+                        </div>
+                    </div>
+                `,
+                onConfirm: async () => {
+                    u.username = document.getElementById('m-u-name').value.trim();
+                    u.password = document.getElementById('m-u-pass').value.trim();
+                    u.fullName = document.getElementById('m-u-full').value.trim();
+                    u.role = document.getElementById('m-u-role').value;
+                    if(!u.username) return showToast('Username is required!', 'error');
+                    await dbSaveRecord('users', u);
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast('User saved successfully!');
+                }
+            });
+        };
+
+        window.deleteRecord = async function(colName, id) {
+            openModal({
+                title: 'Confirm Deletion',
+                bodyHtml: '<p>Are you sure you want to delete this record?</p>',
+                confirmText: 'Delete',
+                onConfirm: async () => {
+                    await dbDeleteRecord(colName, id);
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast('Record deleted successfully.', 'info');
+                }
+            });
+        };
+
+        // Excel Import Utility
+        window.importExcelData = function(event, colName) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(firstSheet);
+                    
+                    let count = 0;
+                    for (let row of json) {
+                        if (colName === 'categories') {
+                            const rec = { id: row.id || 'CAT-' + Date.now() + Math.random(), name: row.name || row.Name };
+                            if (rec.name) { await dbSaveRecord('categories', rec); count++; }
+                        } else if (colName === 'items') {
+                            const rec = {
+                                id: row.id || 'ITM-' + Date.now() + Math.random(),
+                                code: row.code || row.Code || 'CODE',
+                                name: row.name || row.Name || 'Item',
+                                unit: row.unit || row.Unit || 'PCS',
+                                categoryId: row.categoryId || state.categories[0]?.id || 'CAT-01'
+                            };
+                            if (rec.name) { await dbSaveRecord('items', rec); count++; }
+                        } else if (colName === 'branches') {
+                            const rec = {
+                                id: row.id || 'BR-' + Date.now() + Math.random(),
+                                code: row.code || row.Code || 'BR',
+                                name: row.name || row.Name || 'Branch',
+                                address: row.address || row.Address || ''
+                            };
+                            if (rec.name) { await dbSaveRecord('branches', rec); count++; }
+                        }
+                    }
+                    showToast(`Successfully imported ${count} records from Excel!`, 'success');
+                    renderCurrentRoute();
+                } catch (err) {
+                    showToast('Failed to parse Excel file.', 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        };
 
         window.addEventListener('DOMContentLoaded', () => {
             lucide.createIcons();
