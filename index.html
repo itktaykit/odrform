@@ -1269,20 +1269,29 @@
         }
 
         // ==================== 5. CATEGORIES & ITEM MASTER ====================
+        let itemMasterFilterCatId = '';
         let selectedImportCategoryId = '';
-        let itemMasterFilterCatId = 'ALL';
 
         function renderMasterItemsView(container) {
-            if (!selectedImportCategoryId && state.categories.length > 0) {
-                selectedImportCategoryId = state.categories[0].id;
+            if (state.categories.length > 0) {
+                if (!itemMasterFilterCatId || !state.categories.some(c => c.id === itemMasterFilterCatId)) {
+                    itemMasterFilterCatId = state.categories[0].id;
+                }
+                selectedImportCategoryId = itemMasterFilterCatId;
+            } else {
+                itemMasterFilterCatId = '';
+                selectedImportCategoryId = '';
             }
 
-            const filteredItems = itemMasterFilterCatId === 'ALL' 
-                ? state.items 
-                : state.items.filter(i => i.categoryId === itemMasterFilterCatId);
+            const filteredItems = itemMasterFilterCatId 
+                ? state.items.filter(i => i.categoryId === itemMasterFilterCatId)
+                : [];
+
+            const currentCatName = state.categories.find(c => c.id === itemMasterFilterCatId)?.name || 'No Category Selected';
 
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
+                    <!-- Categories Table -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div>
@@ -1315,19 +1324,23 @@
                         </table>
                     </div>
 
+                    <!-- Items Table -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b">
                             <div class="flex items-center gap-3">
                                 <div>
                                     <h3 class="font-bold text-lg">Item Master Management</h3>
-                                    <p class="text-xs text-slate-500">View and filter items strictly by category</p>
+                                    <p class="text-xs text-slate-500">View and manage items strictly per category</p>
                                 </div>
-                                <select id="filter-cat-select" onchange="itemMasterFilterCatId = this.value; renderMasterItemsView(document.getElementById('main-content'))" class="px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold text-blue-700">
-                                    <option value="ALL">-- All Categories (${state.items.length} items) --</option>
+                                <select id="filter-cat-select" onchange="itemMasterFilterCatId = this.value; selectedImportCategoryId = this.value; renderMasterItemsView(document.getElementById('main-content'))" class="px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold text-blue-700">
+                                    ${state.categories.length === 0 ? `<option value="">No Categories Available</option>` : ''}
                                     ${state.categories.map(c => `<option value="${c.id}" ${c.id === itemMasterFilterCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
                                 </select>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
+                                <button onclick="refreshItemMasterView()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm" title="Refresh/Reset View">
+                                    <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Refresh
+                                </button>
                                 <button onclick="deleteSelectedItems()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Selected
                                 </button>
@@ -1338,14 +1351,12 @@
                             </div>
                         </div>
 
+                        <!-- Import Category Target Banner -->
                         <div class="flex items-center justify-between bg-blue-50/70 p-3 rounded-xl border border-blue-100 text-xs">
                             <span class="font-bold text-blue-900 flex items-center gap-1.5">
-                                <i data-lucide="info" class="w-4 h-4 text-blue-600"></i> Excel Import Target Category (New imported items will go here):
+                                <i data-lucide="info" class="w-4 h-4 text-blue-600"></i> Active Category & Excel Import Target: <span class="text-blue-700 font-extrabold text-sm underline">${escapeHtml(currentCatName)}</span>
                             </span>
-                            <select id="import-target-cat" onchange="selectedImportCategoryId = this.value" class="px-3 py-1.5 bg-white border border-blue-200 rounded-lg font-bold text-blue-800">
-                                ${state.categories.length === 0 ? `<option value="">No Categories Available</option>` : ''}
-                                ${state.categories.map(c => `<option value="${c.id}" ${c.id === selectedImportCategoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
-                            </select>
+                            <span class="text-slate-500 font-medium">New imported or manual items will be assigned exclusively to this category.</span>
                         </div>
 
                         <table class="w-full text-left text-sm border">
@@ -1363,7 +1374,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${filteredItems.length === 0 ? `<tr><td colspan="7" class="p-8 text-center text-slate-400 font-medium">No items found in this category. Select another category or import items.</td></tr>` :
+                                ${filteredItems.length === 0 ? `<tr><td colspan="7" class="p-8 text-center text-slate-400 font-medium">No items found in <strong>${escapeHtml(currentCatName)}</strong>. Select another category or import items.</td></tr>` :
                                     filteredItems.map((it, idx) => {
                                         const cat = state.categories.find(c => c.id === it.categoryId);
                                         return `
@@ -1389,6 +1400,15 @@
                 </div>
             `;
         }
+
+        window.refreshItemMasterView = function() {
+            if (state.categories.length > 0) {
+                itemMasterFilterCatId = state.categories[0].id;
+                selectedImportCategoryId = state.categories[0].id;
+            }
+            renderMasterItemsView(document.getElementById('main-content'));
+            showToast('Item Master view refreshed successfully!', 'info');
+        };
 
         window.toggleSelectAll = function(className, isChecked) {
             document.querySelectorAll('.' + className).forEach(cb => cb.checked = isChecked);
