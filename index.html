@@ -23,7 +23,6 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Excel Grid Styling */
         .excel-grid th, .excel-grid td {
             border: 1px solid #cbd5e1;
         }
@@ -87,7 +86,6 @@
     <!-- ==================== SECURE LOGIN SCREEN ==================== -->
     <div id="login-view" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950">
         <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 border border-slate-100">
-            <!-- Dynamic Company Logo & Info -->
             <div class="text-center mb-7">
                 <div id="login-logo-container" class="w-20 h-20 bg-slate-100 border-2 border-dashed border-slate-300 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4 overflow-hidden shadow-sm">
                     <i data-lucide="building-2" class="w-9 h-9"></i>
@@ -134,7 +132,6 @@
     <!-- ==================== MAIN APPLICATION SHELL ==================== -->
     <div id="app-view" class="hidden min-h-screen flex flex-col lg:flex-row">
         
-        <!-- Sidebar Navigation -->
         <aside id="sidebar" class="no-print w-full lg:w-72 bg-slate-900 text-slate-300 flex flex-col shrink-0 transition-all">
             <div class="p-5 border-b border-slate-800 flex items-center justify-between">
                 <div class="flex items-center gap-3 min-w-0">
@@ -151,10 +148,8 @@
                 </button>
             </div>
 
-            <!-- Navigation Menu Items -->
             <nav id="sidebar-nav" class="flex-1 p-4 space-y-1.5 overflow-y-auto"></nav>
 
-            <!-- Database Status & User Card -->
             <div class="p-4 border-t border-slate-800 space-y-3">
                 <div id="db-status-btn" class="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700/80 text-xs">
                     <span class="flex items-center gap-2 min-w-0">
@@ -176,7 +171,6 @@
             </div>
         </aside>
 
-        <!-- Main Workspace Content -->
         <main class="flex-1 flex flex-col min-w-0">
             <header class="no-print bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-20">
                 <div>
@@ -225,16 +219,14 @@
         const auth = getAuth(firebaseApp);
         const firestoreDb = getFirestore(firebaseApp);
 
-        // Authenticate client session with Firebase Auth so Firestore security rules can verify request.auth != null
         async function ensureFirebaseAuth() {
             try {
                 await signInAnonymously(auth);
             } catch (e) {
-                console.warn('Enable Anonymous Auth in Firebase Console -> Authentication -> Sign-in method for strict auth enforcement.');
+                console.warn('Anonymous auth offline/unconfigured fallback active.');
             }
         }
 
-        // Security: HTML Escaping to prevent XSS
         window.escapeHtml = function(str) {
             if (str === null || str === undefined) return '';
             return String(str)
@@ -245,7 +237,6 @@
                 .replace(/'/g, '&#039;');
         };
 
-        // Security: SHA-256 Password Hashing
         async function hashPassword(plainText) {
             const encoder = new TextEncoder();
             const data = encoder.encode(plainText + '_KTY_SALT_2026');
@@ -279,7 +270,7 @@
             orders: []
         };
 
-        const STORAGE_KEY = 'kty_store_order_secure_v8';
+        const STORAGE_KEY = 'kty_store_order_secure_v9';
         let state = JSON.parse(JSON.stringify(CLEAN_DEFAULT_DATA));
 
         async function ensureDefaultAdmin() {
@@ -347,6 +338,7 @@
             }
             await ensureDefaultAdmin();
             applyCompanyBranding();
+            checkExistingSession();
         }
 
         window.dbSaveRecord = async function(colName, record) {
@@ -356,9 +348,7 @@
             saveToLocalStorage();
             try {
                 await setDoc(doc(firestoreDb, colName, record.id), record);
-            } catch (e) {
-                console.error('Firestore write error:', e);
-            }
+            } catch (e) {}
         };
 
         window.dbDeleteRecord = async function(colName, id) {
@@ -373,7 +363,6 @@
             const s = state.settings || DEFAULT_SETTINGS;
             document.title = `${s.softwareName} | ${s.companyName}`;
 
-            // Login Screen Branding
             document.getElementById('login-company-name').textContent = s.companyName || 'Enterprise Stock Portal';
             document.getElementById('login-software-title').textContent = s.softwareName || 'Stock Transfer ERP';
             const infoParts = [s.tagline, s.address].filter(Boolean);
@@ -390,7 +379,6 @@
                 loginLogoBox.innerHTML = `<i data-lucide="building-2" class="w-9 h-9"></i>`;
             }
 
-            // Sidebar Branding
             document.getElementById('sidebar-software-name').textContent = s.softwareName || 'StockTransfer';
             document.getElementById('sidebar-company-name').textContent = s.companyName || 'Supply Chain ERP';
             const sidebarLogoBox = document.getElementById('sidebar-logo-box');
@@ -458,25 +446,61 @@
             if (window.activeModalConfirm) await window.activeModalConfirm();
         });
 
-        // ==================== AUTHENTICATION & INACTIVITY LOCK ====================
         let currentUser = null;
         let currentRoute = 'order-form';
         let failedAttempts = 0;
         let lockoutUntil = 0;
         let inactivityTimer = null;
 
+        // 15 Minutes Inactivity Timeout
+        const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
+
         function resetInactivityTimer() {
             if (!currentUser) return;
+            const expiryTime = Date.now() + INACTIVITY_TIMEOUT_MS;
+            sessionStorage.setItem('kty_session_expiry', expiryTime);
+
             clearTimeout(inactivityTimer);
             inactivityTimer = setTimeout(() => {
                 logout();
-                showToast('Session locked due to 30 minutes of inactivity.', 'warning');
-            }, 30 * 60 * 1000);
+                showToast('Session logged out due to 15 minutes of inactivity.', 'warning');
+            }, INACTIVITY_TIMEOUT_MS);
         }
 
-        ['click', 'keydown', 'mousemove'].forEach(evt => {
+        ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'].forEach(evt => {
             window.addEventListener(evt, resetInactivityTimer, { passive: true });
         });
+
+        function checkExistingSession() {
+            const savedUser = sessionStorage.getItem('kty_active_user');
+            const expiry = sessionStorage.getItem('kty_session_expiry');
+
+            if (savedUser && expiry) {
+                if (Date.now() < parseInt(expiry)) {
+                    try {
+                        currentUser = JSON.parse(savedUser);
+                        document.getElementById('login-view').classList.add('hidden');
+                        document.getElementById('app-view').classList.remove('hidden');
+
+                        document.getElementById('user-display-name').textContent = currentUser.fullName;
+                        document.getElementById('user-display-role').textContent = currentUser.role.replace('_', ' ');
+                        document.getElementById('header-role-label').textContent = `${currentUser.fullName} (${currentUser.role.toUpperCase()})`;
+
+                        if (currentUser.role === 'factory_warehouse') {
+                            currentRoute = 'order-matrix';
+                        } else {
+                            currentRoute = 'order-form';
+                        }
+
+                        resetInactivityTimer();
+                        renderSidebarMenu();
+                        renderCurrentRoute();
+                        return;
+                    } catch (e) {}
+                }
+            }
+            logout();
+        }
 
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -504,7 +528,7 @@
             const matchedUser = state.users.find(u => {
                 if (u.username.toLowerCase() !== uname) return false;
                 if (u.passwordHash) return u.passwordHash === inputHash;
-                return u.password === pwd; // Backward compatibility for legacy plain records
+                return u.password === pwd;
             });
 
             if (!matchedUser) {
@@ -524,7 +548,9 @@
             failedAttempts = 0;
             currentUser = { ...matchedUser };
 
-            // Clear login inputs immediately for security
+            sessionStorage.setItem('kty_active_user', JSON.stringify(currentUser));
+            resetInactivityTimer();
+
             document.getElementById('login-username').value = '';
             document.getElementById('login-password').value = '';
 
@@ -535,14 +561,12 @@
             document.getElementById('user-display-role').textContent = currentUser.role.replace('_', ' ');
             document.getElementById('header-role-label').textContent = `${currentUser.fullName} (${currentUser.role.toUpperCase()})`;
 
-            // Default route by role
             if (currentUser.role === 'factory_warehouse') {
                 currentRoute = 'order-matrix';
             } else {
                 currentRoute = 'order-form';
             }
 
-            resetInactivityTimer();
             renderSidebarMenu();
             renderCurrentRoute();
             showToast(`Welcome, ${currentUser.fullName}!`, 'success');
@@ -551,11 +575,13 @@
         window.logout = function() {
             currentUser = null;
             clearTimeout(inactivityTimer);
+            sessionStorage.removeItem('kty_active_user');
+            sessionStorage.removeItem('kty_session_expiry');
+
             document.getElementById('login-username').value = '';
             document.getElementById('login-password').value = '';
             document.getElementById('app-view').classList.add('hidden');
             document.getElementById('login-view').classList.remove('hidden');
-            showToast('Logged out safely.', 'info');
         };
 
         function getAllowedRoutes() {
@@ -773,7 +799,6 @@
             const branch = state.branches.find(b => b.id === orderFormState.branchId);
             const dest = state.destinations.find(d => d.id === orderFormState.destinationId);
 
-            // Check if an order already exists for this branch & delivery date so we merge cleanly
             let existingOrder = state.orders.find(o => o.branchId === orderFormState.branchId && o.deliveryDate === orderFormState.deliveryDate && o.destinationId === orderFormState.destinationId);
 
             if (existingOrder) {
@@ -889,12 +914,10 @@
         function renderOrderMatrixView(container) {
             const canEditMatrix = currentUser && (currentUser.role === 'admin' || currentUser.role === 'factory_warehouse');
 
-            // Filter items by selected category
             const displayedItems = matrixFilterCatId === 'ALL'
                 ? state.items
                 : state.items.filter(it => it.categoryId === matrixFilterCatId);
 
-            // Filter orders by selected delivery date (and destination if destination user has one assigned)
             const dateOrders = state.orders.filter(o => {
                 const dateMatch = !matrixFilterDate || o.deliveryDate === matrixFilterDate;
                 const destMatch = (currentUser?.role === 'factory_warehouse' && currentUser.destinationId)
@@ -905,7 +928,6 @@
 
             container.innerHTML = `
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
-                    <!-- Top Filter & Toolbar -->
                     <div class="flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-slate-200">
                         <div class="flex flex-wrap items-end gap-4">
                             <div>
@@ -932,7 +954,6 @@
                         </div>
                     </div>
 
-                    <!-- Excel-Style Spreadsheet Table -->
                     <div class="overflow-x-auto rounded-xl border border-slate-300 shadow-inner">
                         <table id="consolidated-matrix-table" class="excel-grid w-full text-left text-sm whitespace-nowrap border-collapse">
                             <thead>
@@ -1007,7 +1028,6 @@
             };
         }
 
-        // Inline Excel Cell Editing with Enter & Tab Commit
         window.startMatrixCellEdit = function(td) {
             if (td.classList.contains('excel-cell-editing')) return;
 
@@ -1045,14 +1065,12 @@
                     await updateBranchOrderFromMatrix(branchId, itemId, newVal);
                 }
 
-                // Recalculate Row Total immediately
                 const rowCells = document.querySelectorAll(`td[data-item-id="${itemId}"]`);
                 let sum = 0;
                 rowCells.forEach(c => sum += (parseFloat(c.textContent.trim()) || 0));
                 const totalCell = document.getElementById(`matrix-row-total-${itemId}`);
                 if (totalCell) totalCell.textContent = sum;
 
-                // Move focus to adjacent cell if Tab was pressed
                 if (moveNext) {
                     const totalCols = state.branches.length;
                     let nextRow = rowIdx;
@@ -1092,7 +1110,6 @@
             });
         };
 
-        // Syncs edits from Consolidated Matrix directly back to the Branch's Submitted Order Request
         async function updateBranchOrderFromMatrix(branchId, itemId, newQty) {
             const targetDate = matrixFilterDate || TODAY;
             const branch = state.branches.find(b => b.id === branchId);
@@ -1101,11 +1118,9 @@
                 : (state.destinations[0]?.id || 'DST-01');
             const dest = state.destinations.find(d => d.id === destId);
 
-            // Find matching orders for this branch & delivery date
             const matchingOrders = state.orders.filter(o => o.branchId === branchId && o.deliveryDate === targetDate);
 
             if (matchingOrders.length > 0) {
-                // Update the primary order record and clear duplicate item entries on secondary orders for the same date
                 const primaryOrder = matchingOrders[0];
                 if (!primaryOrder.quantities) primaryOrder.quantities = {};
 
@@ -1124,7 +1139,6 @@
                     }
                 }
             } else if (newQty > 0) {
-                // Create a new order record for this branch & delivery date if none existed
                 const newOrder = {
                     id: 'ORD-' + Date.now(),
                     branchId: branchId,
@@ -1269,7 +1283,6 @@
 
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
-                    <!-- Categories Table -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div>
@@ -1302,13 +1315,12 @@
                         </table>
                     </div>
 
-                    <!-- Items Table -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b">
                             <div class="flex items-center gap-3">
                                 <div>
                                     <h3 class="font-bold text-lg">Item Master Management</h3>
-                                    <p class="text-xs text-slate-500">Filter or import items under specific categories</p>
+                                    <p class="text-xs text-slate-500">View and filter items strictly by category</p>
                                 </div>
                                 <select id="filter-cat-select" onchange="itemMasterFilterCatId = this.value; renderMasterItemsView(document.getElementById('main-content'))" class="px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold text-blue-700">
                                     <option value="ALL">-- All Categories (${state.items.length} items) --</option>
@@ -1328,7 +1340,7 @@
 
                         <div class="flex items-center justify-between bg-blue-50/70 p-3 rounded-xl border border-blue-100 text-xs">
                             <span class="font-bold text-blue-900 flex items-center gap-1.5">
-                                <i data-lucide="info" class="w-4 h-4 text-blue-600"></i> Excel Import Target Category:
+                                <i data-lucide="info" class="w-4 h-4 text-blue-600"></i> Excel Import Target Category (New imported items will go here):
                             </span>
                             <select id="import-target-cat" onchange="selectedImportCategoryId = this.value" class="px-3 py-1.5 bg-white border border-blue-200 rounded-lg font-bold text-blue-800">
                                 ${state.categories.length === 0 ? `<option value="">No Categories Available</option>` : ''}
@@ -1351,7 +1363,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${filteredItems.length === 0 ? `<tr><td colspan="7" class="p-6 text-center text-slate-400">No items found for this view. Add or import via Excel.</td></tr>` :
+                                ${filteredItems.length === 0 ? `<tr><td colspan="7" class="p-8 text-center text-slate-400 font-medium">No items found in this category. Select another category or import items.</td></tr>` :
                                     filteredItems.map((it, idx) => {
                                         const cat = state.categories.find(c => c.id === it.categoryId);
                                         return `
@@ -1363,7 +1375,7 @@
                                                 <td class="p-3 border font-mono font-bold">${escapeHtml(it.code)}</td>
                                                 <td class="p-3 border font-semibold">${escapeHtml(it.name)}</td>
                                                 <td class="p-3 border">${escapeHtml(it.unit)}</td>
-                                                <td class="p-3 border">${cat ? escapeHtml(cat.name) : '<span class="text-rose-500 font-bold">Unassigned</span>'}</td>
+                                                <td class="p-3 border font-medium text-blue-700">${cat ? escapeHtml(cat.name) : '<span class="text-rose-500 font-bold">Unassigned</span>'}</td>
                                                 <td class="p-3 border text-right space-x-2">
                                                     <button onclick="openItemModal('${it.id}')" class="text-blue-600 font-bold">Edit</button>
                                                     <button onclick="deleteRecord('items', '${it.id}')" class="text-rose-600 font-bold">Delete</button>
@@ -1473,7 +1485,6 @@
         function renderMasterLocationsView(container) {
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
-                    <!-- Branches Management -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b">
                             <div>
@@ -1521,7 +1532,6 @@
                         </table>
                     </div>
 
-                    <!-- Destinations Management -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b">
                             <div>
@@ -1771,7 +1781,6 @@
                         </button>
                     </div>
 
-                    <!-- Logo Upload Section -->
                     <div class="flex flex-col sm:flex-row items-center gap-6 p-4 bg-slate-50 rounded-2xl border border-slate-200">
                         <div id="settings-logo-preview" class="w-24 h-24 bg-white border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 p-2">
                             ${s.logoDataUrl ? `<img src="${s.logoDataUrl}" class="max-w-full max-h-full object-contain">` : `<i data-lucide="image" class="w-8 h-8 text-slate-400"></i>`}
@@ -1788,7 +1797,6 @@
                         </div>
                     </div>
 
-                    <!-- Form Fields -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Software Title</label>
@@ -1846,6 +1854,10 @@
         };
 
         window.saveSystemSettings = async function() {
+            if (currentUser?.role !== 'admin') {
+                return showToast('Permission denied: Administrator access required.', 'error');
+            }
+
             state.settings = {
                 id: 'MAIN_SETTINGS',
                 softwareName: document.getElementById('set-software-name').value.trim() || 'StockTransfer ERP',
@@ -1986,7 +1998,7 @@
 
                     event.target.value = '';
                     if (count > 0) {
-                        showToast(`Successfully imported ${count} records from Excel!`, 'success');
+                        showToast(`Successfully imported ${count} records!`, 'success');
                     } else {
                         showToast('No valid rows found in the Excel file.', 'warning');
                     }
