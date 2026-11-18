@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Restaurant & Warehouse Stock Transfer System</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval';">
+    <title>Stock Transfer & Supply Chain Portal</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -21,6 +22,27 @@
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Excel Grid Styling */
+        .excel-grid th, .excel-grid td {
+            border: 1px solid #cbd5e1;
+        }
+        .excel-cell-editable {
+            cursor: cell;
+            user-select: none;
+            transition: background-color 0.12s ease;
+        }
+        .excel-cell-editable:hover {
+            background-color: #eff6ff;
+            outline: 1px solid #3b82f6;
+            outline-offset: -1px;
+        }
+        .excel-cell-editing {
+            padding: 0 !important;
+            background-color: #ffffff !important;
+            outline: 2px solid #2563eb !important;
+            outline-offset: -2px;
+        }
 
         @media print {
             body * { visibility: hidden !important; }
@@ -47,7 +69,7 @@
 
     <!-- Custom Modal Container -->
     <div id="custom-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-fade-in">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
             <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <h3 id="modal-title" class="text-lg font-bold text-slate-900">Modal Title</h3>
                 <button onclick="closeModal()" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg transition">
@@ -62,46 +84,49 @@
         </div>
     </div>
 
-    <!-- ==================== LOGIN SCREEN ==================== -->
-    <div id="login-view" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950">
+    <!-- ==================== SECURE LOGIN SCREEN ==================== -->
+    <div id="login-view" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950">
         <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 border border-slate-100">
-            <div class="text-center mb-8">
-                <div class="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-600/30">
-                    <i data-lucide="warehouse" class="w-8 h-8"></i>
+            <!-- Dynamic Company Logo & Info -->
+            <div class="text-center mb-7">
+                <div id="login-logo-container" class="w-20 h-20 bg-slate-100 border-2 border-dashed border-slate-300 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4 overflow-hidden shadow-sm">
+                    <i data-lucide="building-2" class="w-9 h-9"></i>
                 </div>
-                <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Stock Transfer Portal</h1>
-                <p class="text-sm text-slate-500 mt-1">Restaurant to Factory & Warehouse Order System</p>
+                <h1 id="login-company-name" class="text-2xl font-extrabold text-slate-900 tracking-tight">Enterprise Stock Portal</h1>
+                <p id="login-software-title" class="text-xs font-bold uppercase tracking-wider text-blue-600 mt-1">Stock Transfer & Supply Chain ERP</p>
+                <p id="login-company-info" class="text-xs text-slate-500 mt-1.5 leading-relaxed"></p>
             </div>
 
-            <form id="login-form" class="space-y-4">
+            <form id="login-form" autocomplete="off" class="space-y-4">
                 <div>
                     <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Username</label>
                     <div class="relative">
                         <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5"></i>
-                        <input type="text" id="login-username" value="admin" placeholder="Enter username" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition">
+                        <input type="text" id="login-username" required autocomplete="off" placeholder="Enter your username" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition">
                     </div>
                 </div>
                 <div>
                     <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Password</label>
                     <div class="relative">
                         <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5"></i>
-                        <input type="password" id="login-password" value="1234" placeholder="Enter password" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition">
+                        <input type="password" id="login-password" required autocomplete="new-password" placeholder="Enter your password" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition">
                     </div>
                 </div>
-                <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2">
-                    <span>Sign In to Portal</span>
-                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+
+                <div id="login-error-box" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-center gap-2">
+                    <i data-lucide="shield-alert" class="w-4 h-4 shrink-0"></i>
+                    <span id="login-error-msg">Invalid credentials.</span>
+                </div>
+
+                <button type="submit" id="login-submit-btn" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2">
+                    <i data-lucide="shield-check" class="w-4 h-4"></i>
+                    <span>Secure Sign In</span>
                 </button>
             </form>
 
-            <div class="mt-6 p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs text-slate-600 space-y-1.5">
-                <div class="font-bold text-slate-800 flex items-center gap-1.5">
-                    <i data-lucide="info" class="w-3.5 h-3.5 text-blue-600"></i> Universal Login Enabled
-                </div>
-                <div class="grid grid-cols-2 gap-1 pt-1">
-                    <button type="button" onclick="quickFillLogin('admin')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">admin</span> (Full Access)</button>
-                    <button type="button" onclick="quickFillLogin('branch1')" class="text-left px-2 py-1 rounded hover:bg-blue-50 text-slate-700 font-medium">• <span class="font-mono text-blue-600">branch1</span> (Branch)</button>
-                </div>
+            <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                <span class="flex items-center gap-1"><i data-lucide="lock" class="w-3 h-3 text-emerald-500"></i> Encrypted Session</span>
+                <span id="login-footer-contact">Authorized Personnel Only</span>
             </div>
         </div>
     </div>
@@ -111,14 +136,14 @@
         
         <!-- Sidebar Navigation -->
         <aside id="sidebar" class="no-print w-full lg:w-72 bg-slate-900 text-slate-300 flex flex-col shrink-0 transition-all">
-            <div class="p-6 border-b border-slate-800 flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-md">
+            <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div id="sidebar-logo-box" class="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-md shrink-0 overflow-hidden">
                         <i data-lucide="boxes" class="w-5 h-5"></i>
                     </div>
-                    <div>
-                        <div class="font-bold text-white text-base leading-tight">StockTransfer</div>
-                        <div class="text-[11px] text-slate-400 font-medium">Supply Chain ERP</div>
+                    <div class="min-w-0">
+                        <div id="sidebar-software-name" class="font-bold text-white text-sm leading-tight truncate">StockTransfer</div>
+                        <div id="sidebar-company-name" class="text-[11px] text-slate-400 font-medium truncate">Supply Chain ERP</div>
                     </div>
                 </div>
                 <button id="mobile-menu-toggle" class="lg:hidden p-2 text-slate-400 hover:text-white rounded-lg">
@@ -134,17 +159,15 @@
                 <div id="db-status-btn" class="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700/80 text-xs">
                     <span class="flex items-center gap-2 min-w-0">
                         <span id="db-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                        <span id="db-status-text" class="font-medium text-slate-200 truncate">Firebase Connected</span>
+                        <span id="db-status-text" class="font-medium text-slate-200 truncate">Firestore Secured</span>
                     </span>
-                    <button onclick="resetDemoData()" title="Reset All Data" class="p-1 text-slate-400 hover:text-white rounded transition shrink-0">
-                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                    </button>
+                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>
                 </div>
 
                 <div class="bg-slate-800/60 rounded-xl p-3 flex items-center justify-between">
                     <div class="min-w-0">
-                        <div id="user-display-name" class="text-sm font-bold text-white truncate">Admin User</div>
-                        <div id="user-display-role" class="text-[11px] text-blue-400 font-semibold uppercase tracking-wider truncate">ADMINISTRATOR</div>
+                        <div id="user-display-name" class="text-sm font-bold text-white truncate">User</div>
+                        <div id="user-display-role" class="text-[11px] text-blue-400 font-semibold uppercase tracking-wider truncate">ROLE</div>
                     </div>
                     <button onclick="logout()" title="Logout" class="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-700/50 rounded-lg transition">
                         <i data-lucide="log-out" class="w-4 h-4"></i>
@@ -162,8 +185,8 @@
                 </div>
                 <div class="flex items-center gap-3">
                     <span id="header-branch-pill" class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-bold flex items-center gap-1.5">
-                        <i data-lucide="store" class="w-3.5 h-3.5"></i>
-                        <span>System Admin</span>
+                        <i data-lucide="shield" class="w-3.5 h-3.5"></i>
+                        <span id="header-role-label">Authenticated</span>
                     </span>
                 </div>
             </header>
@@ -176,6 +199,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
         import {
             getFirestore,
             collection,
@@ -198,25 +222,85 @@
         const firebaseApp = initializeApp(firebaseConfig);
         let analytics = null;
         try { analytics = getAnalytics(firebaseApp); } catch (e) {}
+        const auth = getAuth(firebaseApp);
         const firestoreDb = getFirestore(firebaseApp);
+
+        // Authenticate client session with Firebase Auth so Firestore security rules can verify request.auth != null
+        async function ensureFirebaseAuth() {
+            try {
+                await signInAnonymously(auth);
+            } catch (e) {
+                console.warn('Enable Anonymous Auth in Firebase Console -> Authentication -> Sign-in method for strict auth enforcement.');
+            }
+        }
+
+        // Security: HTML Escaping to prevent XSS
+        window.escapeHtml = function(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        };
+
+        // Security: SHA-256 Password Hashing
+        async function hashPassword(plainText) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(plainText + '_KTY_SALT_2026');
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
 
         const TODAY = new Date().toISOString().split('T')[0];
         const TOMORROW = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
-        // Clean initial state (Old default demo items cleared as requested)
+        const DEFAULT_SETTINGS = {
+            id: 'MAIN_SETTINGS',
+            softwareName: 'StockTransfer ERP',
+            companyName: 'Enterprise Food & Supply Co.',
+            tagline: 'Central Kitchen, Factory & Branch Inventory Transfer System',
+            address: 'Head Office & Central Warehouse',
+            phone: '',
+            email: '',
+            taxId: '',
+            logoDataUrl: ''
+        };
+
         const CLEAN_DEFAULT_DATA = {
+            settings: { ...DEFAULT_SETTINGS },
             branches: [],
             destinations: [],
             categories: [],
             items: [],
-            users: [
-                { id: 'USR-01', username: 'admin', password: '1234', fullName: 'System Administrator', role: 'admin', branchId: '', destinationId: '' }
-            ],
+            users: [],
             orders: []
         };
 
-        const STORAGE_KEY = 'kty_store_order_cache_v5';
+        const STORAGE_KEY = 'kty_store_order_secure_v8';
         let state = JSON.parse(JSON.stringify(CLEAN_DEFAULT_DATA));
+
+        async function ensureDefaultAdmin() {
+            if (!state.users || state.users.length === 0) {
+                const defaultHash = await hashPassword('1234');
+                const adminUser = {
+                    id: 'USR-01',
+                    username: 'admin',
+                    passwordHash: defaultHash,
+                    fullName: 'System Administrator',
+                    role: 'admin',
+                    branchId: '',
+                    destinationId: ''
+                };
+                state.users = [adminUser];
+                saveToLocalStorage();
+                try {
+                    await setDoc(doc(firestoreDb, 'users', adminUser.id), adminUser);
+                } catch (e) {}
+            }
+        }
 
         function loadFromLocalStorage() {
             const raw = localStorage.getItem(STORAGE_KEY);
@@ -224,11 +308,12 @@
                 try {
                     const parsed = JSON.parse(raw);
                     state = {
+                        settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
                         branches: parsed.branches || [],
                         destinations: parsed.destinations || [],
                         categories: parsed.categories || [],
                         items: parsed.items || [],
-                        users: parsed.users || CLEAN_DEFAULT_DATA.users,
+                        users: parsed.users || [],
                         orders: parsed.orders || []
                     };
                 } catch (e) {}
@@ -240,9 +325,15 @@
         }
 
         async function initHybridDatabase() {
+            await ensureFirebaseAuth();
             loadFromLocalStorage();
             const collections = ['branches', 'destinations', 'categories', 'items', 'users', 'orders'];
             try {
+                const settingsSnap = await getDocs(collection(firestoreDb, 'settings'));
+                if (!settingsSnap.empty) {
+                    const sDoc = settingsSnap.docs[0].data();
+                    state.settings = { ...DEFAULT_SETTINGS, ...sDoc };
+                }
                 for (const colName of collections) {
                     const colRef = collection(firestoreDb, colName);
                     const snap = await getDocs(colRef);
@@ -252,8 +343,10 @@
                 }
                 saveToLocalStorage();
             } catch (err) {
-                console.warn('Firestore offline fallback active.');
+                console.warn('Firestore sync warning:', err.message);
             }
+            await ensureDefaultAdmin();
+            applyCompanyBranding();
         }
 
         window.dbSaveRecord = async function(colName, record) {
@@ -263,8 +356,10 @@
             saveToLocalStorage();
             try {
                 await setDoc(doc(firestoreDb, colName, record.id), record);
-            } catch (e) {}
-        }
+            } catch (e) {
+                console.error('Firestore write error:', e);
+            }
+        };
 
         window.dbDeleteRecord = async function(colName, id) {
             state[colName] = state[colName].filter(r => r.id !== id);
@@ -272,13 +367,61 @@
             try {
                 await deleteDoc(doc(firestoreDb, colName, id));
             } catch (e) {}
-        }
+        };
 
-        window.resetDemoData = async function() {
-            state = JSON.parse(JSON.stringify(CLEAN_DEFAULT_DATA));
-            saveToLocalStorage();
-            showToast('All data cleared/reset successfully!', 'info');
-            renderCurrentRoute();
+        window.applyCompanyBranding = function() {
+            const s = state.settings || DEFAULT_SETTINGS;
+            document.title = `${s.softwareName} | ${s.companyName}`;
+
+            // Login Screen Branding
+            document.getElementById('login-company-name').textContent = s.companyName || 'Enterprise Stock Portal';
+            document.getElementById('login-software-title').textContent = s.softwareName || 'Stock Transfer ERP';
+            const infoParts = [s.tagline, s.address].filter(Boolean);
+            document.getElementById('login-company-info').textContent = infoParts.join(' • ');
+            const contactParts = [s.phone, s.email].filter(Boolean);
+            document.getElementById('login-footer-contact').textContent = contactParts.length > 0 ? contactParts.join(' | ') : 'Authorized Personnel Only';
+
+            const loginLogoBox = document.getElementById('login-logo-container');
+            if (s.logoDataUrl) {
+                loginLogoBox.className = 'w-24 h-24 bg-white border border-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-4 overflow-hidden shadow-md p-1.5';
+                loginLogoBox.innerHTML = `<img src="${s.logoDataUrl}" alt="Company Logo" class="max-w-full max-h-full object-contain">`;
+            } else {
+                loginLogoBox.className = 'w-20 h-20 bg-slate-100 border-2 border-dashed border-slate-300 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4 overflow-hidden shadow-sm';
+                loginLogoBox.innerHTML = `<i data-lucide="building-2" class="w-9 h-9"></i>`;
+            }
+
+            // Sidebar Branding
+            document.getElementById('sidebar-software-name').textContent = s.softwareName || 'StockTransfer';
+            document.getElementById('sidebar-company-name').textContent = s.companyName || 'Supply Chain ERP';
+            const sidebarLogoBox = document.getElementById('sidebar-logo-box');
+            if (s.logoDataUrl) {
+                sidebarLogoBox.className = 'w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md shrink-0 overflow-hidden p-1';
+                sidebarLogoBox.innerHTML = `<img src="${s.logoDataUrl}" alt="Logo" class="max-w-full max-h-full object-contain">`;
+            } else {
+                sidebarLogoBox.className = 'w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-md shrink-0 overflow-hidden';
+                sidebarLogoBox.innerHTML = `<i data-lucide="boxes" class="w-5 h-5"></i>`;
+            }
+            lucide.createIcons();
+        };
+
+        window.clearCollection = async function(colName) {
+            if (currentUser?.role !== 'admin') return showToast('Permission denied: Admin only.', 'error');
+            openModal({
+                title: `Clear All ${colName.toUpperCase()}`,
+                bodyHtml: `<p>Are you sure you want to delete <strong>all</strong> records in <strong>${escapeHtml(colName)}</strong>? This cannot be undone.</p>`,
+                confirmText: 'Clear All',
+                onConfirm: async () => {
+                    const ids = state[colName].map(r => r.id);
+                    state[colName] = [];
+                    saveToLocalStorage();
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast(`All ${colName} cleared!`, 'info');
+                    for (const id of ids) {
+                        try { await deleteDoc(doc(firestoreDb, colName, id)); } catch (e) {}
+                    }
+                }
+            });
         };
 
         window.showToast = function(message, type = 'success') {
@@ -291,9 +434,9 @@
                 warning: 'bg-amber-600 text-white'
             };
             toast.className = `pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl shadow-xl text-sm font-medium transition-all ${styles[type] || styles.info}`;
-            toast.innerHTML = `<span>${message}</span>`;
+            toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
             container.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
+            setTimeout(() => toast.remove(), 3500);
         };
 
         window.openModal = function({ title, bodyHtml, confirmText = 'Save', onConfirm = null }) {
@@ -315,61 +458,125 @@
             if (window.activeModalConfirm) await window.activeModalConfirm();
         });
 
+        // ==================== AUTHENTICATION & INACTIVITY LOCK ====================
         let currentUser = null;
         let currentRoute = 'order-form';
+        let failedAttempts = 0;
+        let lockoutUntil = 0;
+        let inactivityTimer = null;
 
-        window.quickFillLogin = function(uname) {
-            document.getElementById('login-username').value = uname;
-            document.getElementById('login-password').value = '1234';
-        };
+        function resetInactivityTimer() {
+            if (!currentUser) return;
+            clearTimeout(inactivityTimer);
+            inactivityTimer = setTimeout(() => {
+                logout();
+                showToast('Session locked due to 30 minutes of inactivity.', 'warning');
+            }, 30 * 60 * 1000);
+        }
 
-        document.getElementById('login-form').addEventListener('submit', (e) => {
+        ['click', 'keydown', 'mousemove'].forEach(evt => {
+            window.addEventListener(evt, resetInactivityTimer, { passive: true });
+        });
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const uname = document.getElementById('login-username').value.trim().toLowerCase();
-            
-            let user = state.users.find(u => u.username.toLowerCase() === uname);
-            if (!user) {
-                user = {
-                    id: 'USR-' + Date.now(),
-                    username: uname || 'admin',
-                    password: '1234',
-                    fullName: uname ? (uname.charAt(0).toUpperCase() + uname.slice(1) + ' User') : 'System Admin',
-                    role: uname.includes('branch') ? 'branch' : 'admin',
-                    branchId: '',
-                    destinationId: ''
-                };
+            const errBox = document.getElementById('login-error-box');
+            const errMsg = document.getElementById('login-error-msg');
+            errBox.classList.add('hidden');
+
+            if (Date.now() < lockoutUntil) {
+                const secs = Math.ceil((lockoutUntil - Date.now()) / 1000);
+                errMsg.textContent = `Too many failed attempts. Try again in ${secs}s.`;
+                errBox.classList.remove('hidden');
+                return;
             }
 
-            currentUser = { ...user };
+            const uname = document.getElementById('login-username').value.trim().toLowerCase();
+            const pwd = document.getElementById('login-password').value;
+
+            if (!uname || !pwd) {
+                errMsg.textContent = 'Please enter both username and password.';
+                errBox.classList.remove('hidden');
+                return;
+            }
+
+            const inputHash = await hashPassword(pwd);
+            const matchedUser = state.users.find(u => {
+                if (u.username.toLowerCase() !== uname) return false;
+                if (u.passwordHash) return u.passwordHash === inputHash;
+                return u.password === pwd; // Backward compatibility for legacy plain records
+            });
+
+            if (!matchedUser) {
+                failedAttempts++;
+                if (failedAttempts >= 5) {
+                    lockoutUntil = Date.now() + 60000;
+                    failedAttempts = 0;
+                    errMsg.textContent = 'Account temporarily locked for 60 seconds due to multiple failed logins.';
+                } else {
+                    errMsg.textContent = 'Invalid username or password. Access denied.';
+                }
+                errBox.classList.remove('hidden');
+                document.getElementById('login-password').value = '';
+                return;
+            }
+
+            failedAttempts = 0;
+            currentUser = { ...matchedUser };
+
+            // Clear login inputs immediately for security
+            document.getElementById('login-username').value = '';
+            document.getElementById('login-password').value = '';
+
             document.getElementById('login-view').classList.add('hidden');
             document.getElementById('app-view').classList.remove('hidden');
 
             document.getElementById('user-display-name').textContent = currentUser.fullName;
             document.getElementById('user-display-role').textContent = currentUser.role.replace('_', ' ');
+            document.getElementById('header-role-label').textContent = `${currentUser.fullName} (${currentUser.role.toUpperCase()})`;
 
+            // Default route by role
+            if (currentUser.role === 'factory_warehouse') {
+                currentRoute = 'order-matrix';
+            } else {
+                currentRoute = 'order-form';
+            }
+
+            resetInactivityTimer();
             renderSidebarMenu();
             renderCurrentRoute();
-            showToast(`Logged in successfully as ${currentUser.fullName}!`, 'success');
+            showToast(`Welcome, ${currentUser.fullName}!`, 'success');
         });
 
         window.logout = function() {
             currentUser = null;
+            clearTimeout(inactivityTimer);
+            document.getElementById('login-username').value = '';
+            document.getElementById('login-password').value = '';
             document.getElementById('app-view').classList.add('hidden');
             document.getElementById('login-view').classList.remove('hidden');
             showToast('Logged out safely.', 'info');
         };
 
+        function getAllowedRoutes() {
+            if (!currentUser) return [];
+            const role = currentUser.role;
+            const allRoutes = [
+                { id: 'order-form', label: 'Stock Transfer Order Form', icon: 'clipboard-edit', roles: ['admin', 'branch'] },
+                { id: 'my-orders', label: 'Branch Order History', icon: 'history', roles: ['admin', 'branch', 'factory_warehouse'] },
+                { id: 'order-matrix', label: 'Consolidated Order Matrix', icon: 'table-2', roles: ['admin', 'factory_warehouse'] },
+                { id: 'delivery-challan', label: 'Delivery Challan & Print', icon: 'printer', roles: ['admin', 'factory_warehouse'] },
+                { id: 'master-items', label: 'Categories & Item Master', icon: 'package', roles: ['admin'] },
+                { id: 'master-locations', label: 'Branches & Destinations', icon: 'building-2', roles: ['admin'] },
+                { id: 'master-users', label: 'User Accounts & Roles', icon: 'users', roles: ['admin'] },
+                { id: 'system-settings', label: 'Company & System Info', icon: 'settings', roles: ['admin'] }
+            ];
+            return allRoutes.filter(r => r.roles.includes(role));
+        }
+
         function renderSidebarMenu() {
             const nav = document.getElementById('sidebar-nav');
-            const items = [
-                { id: 'order-form', label: 'Stock Transfer Order Form', icon: 'clipboard-edit' },
-                { id: 'my-orders', label: 'Branch Order History', icon: 'history' },
-                { id: 'order-matrix', label: 'Consolidated Order Matrix', icon: 'table-2' },
-                { id: 'delivery-challan', label: 'Delivery Challan & Print', icon: 'printer' },
-                { id: 'master-items', label: 'Categories & Item Master', icon: 'package' },
-                { id: 'master-locations', label: 'Branches & Destinations', icon: 'building-2' },
-                { id: 'master-users', label: 'User Accounts & Roles', icon: 'users' }
-            ];
+            const items = getAllowedRoutes();
 
             nav.innerHTML = items.map(item => `
                 <button onclick="navigateTo('${item.id}')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${currentRoute === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
@@ -381,6 +588,10 @@
         }
 
         window.navigateTo = function(routeId) {
+            const allowed = getAllowedRoutes().map(r => r.id);
+            if (!allowed.includes(routeId)) {
+                return showToast('Access Denied: You do not have permission for this module.', 'error');
+            }
             currentRoute = routeId;
             renderSidebarMenu();
             renderCurrentRoute();
@@ -388,6 +599,20 @@
 
         function renderCurrentRoute() {
             const container = document.getElementById('main-content');
+            const titles = {
+                'order-form': ['Stock Transfer Order Form', 'Submit branch stock requests to factory or warehouse'],
+                'my-orders': ['Branch Order History', 'View and track submitted stock transfer requests'],
+                'order-matrix': ['Consolidated Order Matrix', 'Double-click any cell to edit branch quantities (Enter or Tab to save)'],
+                'delivery-challan': ['Delivery Challan & Print', 'Generate and print branch dispatch notes'],
+                'master-items': ['Categories & Item Master', 'Manage product categories, codes, and units'],
+                'master-locations': ['Branches & Destinations', 'Configure restaurant branches and supply warehouses'],
+                'master-users': ['User Accounts & Roles', 'Manage system credentials and access permissions'],
+                'system-settings': ['Company & System Information', 'Configure software branding, company details, and logo']
+            };
+            const [t, sub] = titles[currentRoute] || ['Dashboard', ''];
+            document.getElementById('page-title').textContent = t;
+            document.getElementById('page-subtitle').textContent = sub;
+
             if (currentRoute === 'order-form') renderOrderFormView(container);
             else if (currentRoute === 'my-orders') renderBranchHistoryView(container);
             else if (currentRoute === 'order-matrix') renderOrderMatrixView(container);
@@ -395,6 +620,7 @@
             else if (currentRoute === 'master-items') renderMasterItemsView(container);
             else if (currentRoute === 'master-locations') renderMasterLocationsView(container);
             else if (currentRoute === 'master-users') renderMasterUsersView(container);
+            else if (currentRoute === 'system-settings') renderSystemSettingsView(container);
             lucide.createIcons();
         }
 
@@ -410,6 +636,9 @@
         };
 
         function renderOrderFormView(container) {
+            if (currentUser?.role === 'branch' && currentUser.branchId) {
+                orderFormState.branchId = currentUser.branchId;
+            }
             const cats = state.categories;
             const activeCat = cats[orderFormState.catIdx] || cats[0];
             const items = activeCat ? state.items.filter(i => i.categoryId === activeCat.id) : [];
@@ -430,16 +659,16 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Branch</label>
-                                <select id="f-branch" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
+                                <select id="f-branch" ${currentUser?.role === 'branch' && currentUser.branchId ? 'disabled' : ''} class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
                                     <option value="">Select Branch...</option>
-                                    ${state.branches.map(b => `<option value="${b.id}" ${b.id === orderFormState.branchId ? 'selected' : ''}>${b.name}</option>`).join('')}
+                                    ${state.branches.map(b => `<option value="${b.id}" ${b.id === orderFormState.branchId ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-500 mb-1">To Destination</label>
                                 <select id="f-dest" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
                                     <option value="">Select Destination...</option>
-                                    ${state.destinations.map(d => `<option value="${d.id}" ${d.id === orderFormState.destinationId ? 'selected' : ''}>${d.name}</option>`).join('')}
+                                    ${state.destinations.map(d => `<option value="${d.id}" ${d.id === orderFormState.destinationId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
                                 </select>
                             </div>
                             <div>
@@ -457,12 +686,12 @@
                         ${cats.length === 0 ? `
                             <div class="p-8 text-center text-slate-500 bg-slate-50 rounded-xl">
                                 <p class="font-bold">No categories or items found.</p>
-                                <p class="text-xs mt-1">Please add categories and items in the Master section or import via Excel first.</p>
+                                <p class="text-xs mt-1">Please add categories and items in the Master section first.</p>
                             </div>
                         ` : `
                             <div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl">
                                 <select id="f-cat" class="px-4 py-2 bg-white border rounded-xl text-sm font-bold">
-                                    ${cats.map((c, i) => `<option value="${i}" ${i === orderFormState.catIdx ? 'selected' : ''}>${c.name}</option>`).join('')}
+                                    ${cats.map((c, i) => `<option value="${i}" ${i === orderFormState.catIdx ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
                                 </select>
                                 <div class="flex gap-2">
                                     <button onclick="changeCat(-1)" class="px-3 py-1.5 bg-white border rounded-lg text-sm font-bold">Previous</button>
@@ -474,6 +703,7 @@
                                 <table class="w-full text-left">
                                     <thead class="bg-slate-100 text-xs font-bold text-slate-600 uppercase">
                                         <tr>
+                                            <th class="py-3 px-4">Sr</th>
                                             <th class="py-3 px-4">Code</th>
                                             <th class="py-3 px-4">Item Name</th>
                                             <th class="py-3 px-4">Unit</th>
@@ -481,13 +711,14 @@
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y text-sm">
-                                        ${items.map(it => `
+                                        ${items.map((it, idx) => `
                                             <tr>
-                                                <td class="py-3 px-4 font-mono font-bold">${it.code}</td>
-                                                <td class="py-3 px-4 font-semibold">${it.name}</td>
-                                                <td class="py-3 px-4"><span class="px-2 py-0.5 bg-slate-100 text-xs font-bold rounded">${it.unit}</span></td>
+                                                <td class="py-3 px-4 text-slate-500 font-mono">${idx + 1}</td>
+                                                <td class="py-3 px-4 font-mono font-bold">${escapeHtml(it.code)}</td>
+                                                <td class="py-3 px-4 font-semibold">${escapeHtml(it.name)}</td>
+                                                <td class="py-3 px-4"><span class="px-2 py-0.5 bg-slate-100 text-xs font-bold rounded">${escapeHtml(it.unit)}</span></td>
                                                 <td class="py-3 px-4 text-right">
-                                                    <input type="number" min="0" data-item="${it.id}" ${!orderFormState.isActive ? 'disabled' : ''} value="${orderFormState.quantities[it.id] || ''}" oninput="updateQty('${it.id}', this.value)" class="w-28 px-3 py-1.5 text-right border rounded-xl font-bold">
+                                                    <input type="number" min="0" step="any" data-item="${it.id}" ${!orderFormState.isActive ? 'disabled' : ''} value="${orderFormState.quantities[it.id] || ''}" oninput="updateQty('${it.id}', this.value)" class="w-28 px-3 py-1.5 text-right border rounded-xl font-bold">
                                                 </td>
                                             </tr>
                                         `).join('')}
@@ -542,19 +773,30 @@
             const branch = state.branches.find(b => b.id === orderFormState.branchId);
             const dest = state.destinations.find(d => d.id === orderFormState.destinationId);
 
-            const record = {
-                id: 'ORD-' + Date.now(),
-                branchId: orderFormState.branchId,
-                branchName: branch ? branch.name : 'Branch',
-                destinationId: orderFormState.destinationId,
-                destinationName: dest ? dest.name : 'Destination',
-                requestDate: orderFormState.requestDate,
-                deliveryDate: orderFormState.deliveryDate,
-                status: 'Submitted',
-                quantities: { ...orderFormState.quantities },
-                updatedAt: new Date().toISOString()
-            };
-            await dbSaveRecord('orders', record);
+            // Check if an order already exists for this branch & delivery date so we merge cleanly
+            let existingOrder = state.orders.find(o => o.branchId === orderFormState.branchId && o.deliveryDate === orderFormState.deliveryDate && o.destinationId === orderFormState.destinationId);
+
+            if (existingOrder) {
+                existingOrder.quantities = { ...(existingOrder.quantities || {}), ...orderFormState.quantities };
+                existingOrder.updatedAt = new Date().toISOString();
+                existingOrder.status = 'Submitted';
+                await dbSaveRecord('orders', existingOrder);
+            } else {
+                const record = {
+                    id: 'ORD-' + Date.now(),
+                    branchId: orderFormState.branchId,
+                    branchName: branch ? branch.name : 'Branch',
+                    destinationId: orderFormState.destinationId,
+                    destinationName: dest ? dest.name : 'Destination',
+                    requestDate: orderFormState.requestDate,
+                    deliveryDate: orderFormState.deliveryDate,
+                    status: 'Submitted',
+                    quantities: { ...orderFormState.quantities },
+                    updatedAt: new Date().toISOString()
+                };
+                await dbSaveRecord('orders', record);
+            }
+
             orderFormState.isActive = false;
             orderFormState.quantities = {};
             showToast('Order saved and submitted successfully!', 'success');
@@ -563,79 +805,357 @@
 
         // ==================== 2. BRANCH ORDER HISTORY ====================
         function renderBranchHistoryView(container) {
+            let visibleOrders = state.orders;
+            if (currentUser?.role === 'branch' && currentUser.branchId) {
+                visibleOrders = state.orders.filter(o => o.branchId === currentUser.branchId);
+            }
+
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto bg-white rounded-2xl shadow-sm border p-6 space-y-4">
                     <h3 class="text-lg font-bold">Submitted Orders History</h3>
-                    <table class="w-full text-left text-sm border-collapse">
-                        <thead>
-                            <tr class="bg-slate-100 text-xs font-bold uppercase">
-                                <th class="p-3">ID</th>
-                                <th class="p-3">Branch</th>
-                                <th class="p-3">Destination</th>
-                                <th class="p-3">Delivery Date</th>
-                                <th class="p-3">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y">
-                            ${state.orders.length === 0 ? `<tr><td colspan="5" class="p-6 text-center text-slate-400">No orders submitted yet.</td></tr>` : 
-                                state.orders.map(o => `
-                                    <tr>
-                                        <td class="p-3 font-mono font-bold">${o.id}</td>
-                                        <td class="p-3 font-semibold">${o.branchName}</td>
-                                        <td class="p-3">${o.destinationName}</td>
-                                        <td class="p-3">${o.deliveryDate}</td>
-                                        <td class="p-3"><span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold rounded text-xs">${o.status}</span></td>
-                                    </tr>
-                                `).join('')}
-                        </tbody>
-                    </table>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-xs font-bold uppercase">
+                                    <th class="p-3 border">Order ID</th>
+                                    <th class="p-3 border">Branch</th>
+                                    <th class="p-3 border">Destination</th>
+                                    <th class="p-3 border">Delivery Date</th>
+                                    <th class="p-3 border">Items Count</th>
+                                    <th class="p-3 border">Status</th>
+                                    <th class="p-3 border text-right">Details</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                ${visibleOrders.length === 0 ? `<tr><td colspan="7" class="p-6 text-center text-slate-400">No orders submitted yet.</td></tr>` : 
+                                    visibleOrders.map(o => {
+                                        const itemCount = Object.values(o.quantities || {}).filter(v => v > 0).length;
+                                        return `
+                                            <tr>
+                                                <td class="p-3 border font-mono font-bold">${escapeHtml(o.id)}</td>
+                                                <td class="p-3 border font-semibold">${escapeHtml(o.branchName)}</td>
+                                                <td class="p-3 border">${escapeHtml(o.destinationName)}</td>
+                                                <td class="p-3 border">${escapeHtml(o.deliveryDate)}</td>
+                                                <td class="p-3 border font-bold">${itemCount} items</td>
+                                                <td class="p-3 border"><span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold rounded text-xs">${escapeHtml(o.status)}</span></td>
+                                                <td class="p-3 border text-right">
+                                                    <button onclick="viewOrderDetails('${o.id}')" class="text-blue-600 hover:underline font-bold text-xs">View Items</button>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             `;
         }
 
-        // ==================== 3. CONSOLIDATED ORDER MATRIX ====================
-        function renderOrderMatrixView(container) {
-            container.innerHTML = `
-                <div class="bg-white rounded-2xl shadow-sm border p-6 space-y-4 overflow-x-auto">
-                    <h3 class="text-lg font-bold">Factory & Warehouse Consolidated Order Matrix</h3>
-                    <table class="w-full text-left text-sm whitespace-nowrap border">
-                        <thead>
-                            <tr class="bg-slate-100 font-bold uppercase text-xs">
-                                <th class="p-3 border">Code</th>
-                                <th class="p-3 border">Item Name</th>
-                                ${state.branches.map(b => `<th class="p-3 border text-center">${b.name}</th>`).join('')}
-                                <th class="p-3 border text-center bg-blue-50 text-blue-700">Total Order</th>
-                            </tr>
+        window.viewOrderDetails = function(orderId) {
+            const ord = state.orders.find(o => o.id === orderId);
+            if (!ord) return;
+            const rows = Object.entries(ord.quantities || {})
+                .filter(([_, q]) => q > 0)
+                .map(([itemId, q], i) => {
+                    const it = state.items.find(x => x.id === itemId);
+                    return `<tr>
+                        <td class="p-2 border font-mono text-xs">${i + 1}</td>
+                        <td class="p-2 border font-mono text-xs">${escapeHtml(it?.code || itemId)}</td>
+                        <td class="p-2 border font-semibold text-xs">${escapeHtml(it?.name || 'Unknown Item')}</td>
+                        <td class="p-2 border text-xs">${escapeHtml(it?.unit || '')}</td>
+                        <td class="p-2 border text-right font-bold text-xs">${q}</td>
+                    </tr>`;
+                }).join('');
+
+            openModal({
+                title: `Order Details: ${ord.branchName} (${ord.deliveryDate})`,
+                confirmText: 'Close',
+                bodyHtml: `
+                    <table class="w-full text-left border">
+                        <thead class="bg-slate-100 text-xs font-bold">
+                            <tr><th class="p-2 border">Sr</th><th class="p-2 border">Code</th><th class="p-2 border">Item Name</th><th class="p-2 border">Unit</th><th class="p-2 border text-right">Qty</th></tr>
                         </thead>
-                        <tbody class="divide-y">
-                            ${state.items.length === 0 ? `<tr><td colspan="${3 + state.branches.length}" class="p-6 text-center text-slate-400">No items available. Add items in Master Items.</td></tr>` :
-                                state.items.map(it => {
+                        <tbody>${rows || '<tr><td colspan="5" class="p-4 text-center">No items in order.</td></tr>'}</tbody>
+                    </table>
+                `,
+                onConfirm: () => closeModal()
+            });
+        };
+
+        // ==================== 3. EXCEL-STYLE CONSOLIDATED ORDER MATRIX ====================
+        let matrixFilterDate = TOMORROW;
+        let matrixFilterCatId = 'ALL';
+
+        function renderOrderMatrixView(container) {
+            const canEditMatrix = currentUser && (currentUser.role === 'admin' || currentUser.role === 'factory_warehouse');
+
+            // Filter items by selected category
+            const displayedItems = matrixFilterCatId === 'ALL'
+                ? state.items
+                : state.items.filter(it => it.categoryId === matrixFilterCatId);
+
+            // Filter orders by selected delivery date (and destination if destination user has one assigned)
+            const dateOrders = state.orders.filter(o => {
+                const dateMatch = !matrixFilterDate || o.deliveryDate === matrixFilterDate;
+                const destMatch = (currentUser?.role === 'factory_warehouse' && currentUser.destinationId)
+                    ? o.destinationId === currentUser.destinationId
+                    : true;
+                return dateMatch && destMatch;
+            });
+
+            container.innerHTML = `
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
+                    <!-- Top Filter & Toolbar -->
+                    <div class="flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-slate-200">
+                        <div class="flex flex-wrap items-end gap-4">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Delivery Date Filter</label>
+                                <input type="date" id="matrix-date-filter" value="${matrixFilterDate}" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Category Filter</label>
+                                <select id="matrix-cat-filter" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none min-w-[200px]">
+                                    <option value="ALL">-- All Categories --</option>
+                                    ${state.categories.map(c => `<option value="${c.id}" ${c.id === matrixFilterCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <span class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-xs font-semibold flex items-center gap-1.5">
+                                <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i>
+                                Double-click any branch cell to edit • Press Enter or Tab to save
+                            </span>
+                            <button onclick="exportMatrixToExcel()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
+                                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export Excel
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Excel-Style Spreadsheet Table -->
+                    <div class="overflow-x-auto rounded-xl border border-slate-300 shadow-inner">
+                        <table id="consolidated-matrix-table" class="excel-grid w-full text-left text-sm whitespace-nowrap border-collapse">
+                            <thead>
+                                <tr class="bg-slate-200/90 text-slate-800 font-bold uppercase text-xs select-none">
+                                    <th class="py-3 px-3 text-center w-14 bg-slate-200">Sr. No</th>
+                                    <th class="py-3 px-3 bg-slate-200">Item Code</th>
+                                    <th class="py-3 px-4 bg-slate-200">Item Name</th>
+                                    <th class="py-3 px-3 text-center bg-slate-200">Units</th>
+                                    ${state.branches.map(b => `
+                                        <th class="py-3 px-4 text-center bg-slate-100 text-slate-900 min-w-[115px]">
+                                            ${escapeHtml(b.name)}
+                                        </th>
+                                    `).join('')}
+                                    <th class="py-3 px-4 text-center bg-blue-100 text-blue-900 font-extrabold min-w-[120px]">
+                                        Total Order
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-300 bg-white">
+                                ${displayedItems.length === 0 ? `
+                                    <tr>
+                                        <td colspan="${5 + state.branches.length}" class="p-8 text-center text-slate-400">
+                                            No items found for the selected category.
+                                        </td>
+                                    </tr>
+                                ` : displayedItems.map((it, idx) => {
                                     let rowTotal = 0;
+                                    const branchCells = state.branches.map((b, bIdx) => {
+                                        const branchOrders = dateOrders.filter(o => o.branchId === b.id);
+                                        const q = branchOrders.reduce((sum, ord) => sum + (Number(ord?.quantities?.[it.id]) || 0), 0);
+                                        rowTotal += q;
+
+                                        return `
+                                            <td 
+                                                data-row="${idx}" 
+                                                data-col="${bIdx}" 
+                                                data-item-id="${it.id}" 
+                                                data-branch-id="${b.id}"
+                                                ${canEditMatrix ? `ondblclick="startMatrixCellEdit(this)"` : ''}
+                                                class="py-2.5 px-3 text-center font-bold ${q > 0 ? 'text-slate-900 bg-emerald-50/30' : 'text-slate-400'} ${canEditMatrix ? 'excel-cell-editable' : ''}"
+                                                title="${canEditMatrix ? 'Double-click to edit quantity' : ''}"
+                                            >${q > 0 ? q : 0}</td>
+                                        `;
+                                    }).join('');
+
                                     return `
-                                        <tr>
-                                            <td class="p-3 border font-mono font-bold">${it.code}</td>
-                                            <td class="p-3 border font-semibold">${it.name}</td>
-                                            ${state.branches.map(b => {
-                                                const ord = state.orders.find(o => o.branchId === b.id);
-                                                const q = ord?.quantities?.[it.id] || 0;
-                                                rowTotal += q;
-                                                return `<td class="p-3 border text-center font-bold">${q > 0 ? q : '-'}</td>`;
-                                            }).join('')}
-                                            <td class="p-3 border text-center font-black bg-blue-50/50 text-blue-700">${rowTotal > 0 ? rowTotal : '-'}</td>
+                                        <tr class="hover:bg-slate-50/80">
+                                            <td class="py-2.5 px-3 text-center font-mono text-xs text-slate-500 bg-slate-50">${idx + 1}</td>
+                                            <td class="py-2.5 px-3 font-mono font-bold text-slate-700">${escapeHtml(it.code)}</td>
+                                            <td class="py-2.5 px-4 font-semibold text-slate-900">${escapeHtml(it.name)}</td>
+                                            <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs font-bold text-slate-600">${escapeHtml(it.unit)}</span></td>
+                                            ${branchCells}
+                                            <td id="matrix-row-total-${it.id}" class="py-2.5 px-4 text-center font-black bg-blue-50/70 text-blue-800">
+                                                ${rowTotal}
+                                            </td>
                                         </tr>
                                     `;
                                 }).join('')}
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             `;
+
+            document.getElementById('matrix-date-filter').onchange = e => {
+                matrixFilterDate = e.target.value;
+                renderOrderMatrixView(container);
+            };
+            document.getElementById('matrix-cat-filter').onchange = e => {
+                matrixFilterCatId = e.target.value;
+                renderOrderMatrixView(container);
+            };
         }
+
+        // Inline Excel Cell Editing with Enter & Tab Commit
+        window.startMatrixCellEdit = function(td) {
+            if (td.classList.contains('excel-cell-editing')) return;
+
+            const currentVal = parseFloat(td.textContent.trim()) || 0;
+            const itemId = td.dataset.itemId;
+            const branchId = td.dataset.branchId;
+            const rowIdx = parseInt(td.dataset.row);
+            const colIdx = parseInt(td.dataset.col);
+
+            td.classList.add('excel-cell-editing');
+            td.innerHTML = `<input type="number" min="0" step="any" value="${currentVal}" class="w-full h-full py-2 px-2 text-center font-bold text-blue-700 bg-white outline-none" />`;
+
+            const input = td.querySelector('input');
+            input.focus();
+            input.select();
+
+            let committed = false;
+
+            const commitChange = async (moveNext = false, reverse = false) => {
+                if (committed) return;
+                committed = true;
+
+                const newVal = Math.max(0, parseFloat(input.value) || 0);
+                td.classList.remove('excel-cell-editing');
+                td.textContent = newVal;
+                if (newVal > 0) {
+                    td.classList.remove('text-slate-400');
+                    td.classList.add('text-slate-900', 'bg-emerald-50/30');
+                } else {
+                    td.classList.remove('text-slate-900', 'bg-emerald-50/30');
+                    td.classList.add('text-slate-400');
+                }
+
+                if (newVal !== currentVal) {
+                    await updateBranchOrderFromMatrix(branchId, itemId, newVal);
+                }
+
+                // Recalculate Row Total immediately
+                const rowCells = document.querySelectorAll(`td[data-item-id="${itemId}"]`);
+                let sum = 0;
+                rowCells.forEach(c => sum += (parseFloat(c.textContent.trim()) || 0));
+                const totalCell = document.getElementById(`matrix-row-total-${itemId}`);
+                if (totalCell) totalCell.textContent = sum;
+
+                // Move focus to adjacent cell if Tab was pressed
+                if (moveNext) {
+                    const totalCols = state.branches.length;
+                    let nextRow = rowIdx;
+                    let nextCol = reverse ? colIdx - 1 : colIdx + 1;
+
+                    if (nextCol >= totalCols) {
+                        nextCol = 0;
+                        nextRow = rowIdx + 1;
+                    } else if (nextCol < 0) {
+                        nextCol = totalCols - 1;
+                        nextRow = rowIdx - 1;
+                    }
+
+                    const nextCell = document.querySelector(`td[data-row="${nextRow}"][data-col="${nextCol}"]`);
+                    if (nextCell) {
+                        startMatrixCellEdit(nextCell);
+                    }
+                }
+            };
+
+            input.addEventListener('keydown', async (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    await commitChange(false);
+                } else if (e.key === 'Tab') {
+                    e.preventDefault();
+                    await commitChange(true, e.shiftKey);
+                } else if (e.key === 'Escape') {
+                    committed = true;
+                    td.classList.remove('excel-cell-editing');
+                    td.textContent = currentVal;
+                }
+            });
+
+            input.addEventListener('blur', async () => {
+                await commitChange(false);
+            });
+        };
+
+        // Syncs edits from Consolidated Matrix directly back to the Branch's Submitted Order Request
+        async function updateBranchOrderFromMatrix(branchId, itemId, newQty) {
+            const targetDate = matrixFilterDate || TODAY;
+            const branch = state.branches.find(b => b.id === branchId);
+            const destId = (currentUser?.role === 'factory_warehouse' && currentUser.destinationId)
+                ? currentUser.destinationId
+                : (state.destinations[0]?.id || 'DST-01');
+            const dest = state.destinations.find(d => d.id === destId);
+
+            // Find matching orders for this branch & delivery date
+            const matchingOrders = state.orders.filter(o => o.branchId === branchId && o.deliveryDate === targetDate);
+
+            if (matchingOrders.length > 0) {
+                // Update the primary order record and clear duplicate item entries on secondary orders for the same date
+                const primaryOrder = matchingOrders[0];
+                if (!primaryOrder.quantities) primaryOrder.quantities = {};
+
+                if (newQty > 0) {
+                    primaryOrder.quantities[itemId] = newQty;
+                } else {
+                    delete primaryOrder.quantities[itemId];
+                }
+                primaryOrder.updatedAt = new Date().toISOString();
+                await dbSaveRecord('orders', primaryOrder);
+
+                for (let i = 1; i < matchingOrders.length; i++) {
+                    if (matchingOrders[i].quantities && matchingOrders[i].quantities[itemId] !== undefined) {
+                        delete matchingOrders[i].quantities[itemId];
+                        await dbSaveRecord('orders', matchingOrders[i]);
+                    }
+                }
+            } else if (newQty > 0) {
+                // Create a new order record for this branch & delivery date if none existed
+                const newOrder = {
+                    id: 'ORD-' + Date.now(),
+                    branchId: branchId,
+                    branchName: branch ? branch.name : 'Branch',
+                    destinationId: destId,
+                    destinationName: dest ? dest.name : 'Central Supply',
+                    requestDate: TODAY,
+                    deliveryDate: targetDate,
+                    status: 'Submitted',
+                    quantities: { [itemId]: newQty },
+                    updatedAt: new Date().toISOString()
+                };
+                await dbSaveRecord('orders', newOrder);
+            }
+
+            showToast(`Updated ${branch?.name || 'Branch'} quantity to ${newQty} & synced order.`, 'success');
+        }
+
+        window.exportMatrixToExcel = function() {
+            const table = document.getElementById('consolidated-matrix-table');
+            if (!table) return;
+            const wb = XLSX.utils.table_to_book(table, { sheet: 'Consolidated Matrix' });
+            XLSX.writeFile(wb, `Consolidated_Order_Matrix_${matrixFilterDate || 'All'}.xlsx`);
+        };
 
         // ==================== 4. DELIVERY CHALLAN & PRINT ====================
         let challanBranchId = '';
-        let challanDate = TODAY;
+        let challanDate = TOMORROW;
 
         function renderDeliveryChallanView(container) {
+            const s = state.settings || DEFAULT_SETTINGS;
             const filteredOrders = state.orders.filter(o => {
                 let matchBranch = !challanBranchId || o.branchId === challanBranchId;
                 let matchDate = !challanDate || o.deliveryDate === challanDate;
@@ -649,7 +1169,7 @@
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Select Branch</label>
                             <select id="challan-branch" class="px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold w-60">
                                 <option value="">-- All Branches --</option>
-                                ${state.branches.map(b => `<option value="${b.id}" ${b.id === challanBranchId ? 'selected' : ''}>${b.name}</option>`).join('')}
+                                ${state.branches.map(b => `<option value="${b.id}" ${b.id === challanBranchId ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
                             </select>
                         </div>
                         <div>
@@ -662,45 +1182,64 @@
                     </div>
 
                     <div class="bg-white rounded-2xl shadow-sm border p-8 space-y-6" id="printable-challan">
-                        <div class="flex justify-between border-b pb-4">
-                            <div>
-                                <h2 class="text-2xl font-black">DELIVERY CHALLAN</h2>
-                                <p class="text-xs text-slate-500">Stock Transfer Dispatch Note</p>
+                        <div class="flex justify-between items-start border-b pb-5">
+                            <div class="flex items-center gap-4">
+                                ${s.logoDataUrl ? `<img src="${s.logoDataUrl}" class="w-16 h-16 object-contain rounded-lg border p-1">` : ''}
+                                <div>
+                                    <h1 class="text-xl font-extrabold text-slate-900">${escapeHtml(s.companyName)}</h1>
+                                    <p class="text-xs text-slate-500">${escapeHtml(s.address)}</p>
+                                    <p class="text-xs text-slate-500">${escapeHtml([s.phone, s.email].filter(Boolean).join(' | '))}</p>
+                                </div>
                             </div>
-                            <div class="text-right text-xs text-slate-600">
-                                <p><strong>Dispatch Date:</strong> ${challanDate}</p>
-                                <p><strong>Branch Filter:</strong> ${challanBranchId ? (state.branches.find(b=>b.id===challanBranchId)?.name || '') : 'All Branches'}</p>
+                            <div class="text-right">
+                                <h2 class="text-xl font-black text-blue-700">DELIVERY CHALLAN</h2>
+                                <p class="text-xs text-slate-600 mt-1"><strong>Dispatch Date:</strong> ${escapeHtml(challanDate)}</p>
+                                <p class="text-xs text-slate-600"><strong>Branch:</strong> ${escapeHtml(challanBranchId ? (state.branches.find(b=>b.id===challanBranchId)?.name || '') : 'All Branches')}</p>
                             </div>
                         </div>
+
                         <table class="w-full text-left text-sm border">
                             <thead>
                                 <tr class="bg-slate-100 font-bold text-xs">
+                                    <th class="p-2.5 border">Sr</th>
                                     <th class="p-2.5 border">Code</th>
                                     <th class="p-2.5 border">Item Name</th>
                                     <th class="p-2.5 border">Unit</th>
-                                    <th class="p-2.5 border text-right">Total Requested Qty</th>
+                                    <th class="p-2.5 border text-right">Dispatched Qty</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${state.items.map(it => {
-                                    let totalQty = 0;
-                                    filteredOrders.forEach(ord => {
-                                        if (ord.quantities && ord.quantities[it.id]) {
-                                            totalQty += ord.quantities[it.id];
-                                        }
-                                    });
-                                    if (totalQty === 0) return '';
-                                    return `
-                                        <tr>
-                                            <td class="p-2.5 border font-mono">${it.code}</td>
-                                            <td class="p-2.5 border font-semibold">${it.name}</td>
-                                            <td class="p-2.5 border">${it.unit}</td>
-                                            <td class="p-2.5 border text-right font-bold">${totalQty}</td>
-                                        </tr>
-                                    `;
-                                }).join('')}
+                                ${(() => {
+                                    let rowIndex = 0;
+                                    const rowsHtml = state.items.map(it => {
+                                        let totalQty = 0;
+                                        filteredOrders.forEach(ord => {
+                                            if (ord.quantities && ord.quantities[it.id]) {
+                                                totalQty += Number(ord.quantities[it.id]) || 0;
+                                            }
+                                        });
+                                        if (totalQty === 0) return '';
+                                        rowIndex++;
+                                        return `
+                                            <tr>
+                                                <td class="p-2.5 border text-slate-500 font-mono">${rowIndex}</td>
+                                                <td class="p-2.5 border font-mono">${escapeHtml(it.code)}</td>
+                                                <td class="p-2.5 border font-semibold">${escapeHtml(it.name)}</td>
+                                                <td class="p-2.5 border">${escapeHtml(it.unit)}</td>
+                                                <td class="p-2.5 border text-right font-bold">${totalQty}</td>
+                                            </tr>
+                                        `;
+                                    }).join('');
+                                    return rowsHtml || `<tr><td colspan="5" class="p-6 text-center text-slate-400">No items scheduled for dispatch on this date/branch.</td></tr>`;
+                                })()}
                             </tbody>
                         </table>
+
+                        <div class="pt-10 grid grid-cols-3 gap-6 text-center text-xs text-slate-600">
+                            <div class="border-t border-slate-400 pt-2">Prepared By</div>
+                            <div class="border-t border-slate-400 pt-2">Driver / Dispatch Officer</div>
+                            <div class="border-t border-slate-400 pt-2">Received By (Branch Stamp)</div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -716,17 +1255,33 @@
         }
 
         // ==================== 5. CATEGORIES & ITEM MASTER ====================
+        let selectedImportCategoryId = '';
+        let itemMasterFilterCatId = 'ALL';
+
         function renderMasterItemsView(container) {
+            if (!selectedImportCategoryId && state.categories.length > 0) {
+                selectedImportCategoryId = state.categories[0].id;
+            }
+
+            const filteredItems = itemMasterFilterCatId === 'ALL' 
+                ? state.items 
+                : state.items.filter(i => i.categoryId === itemMasterFilterCatId);
+
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
+                    <!-- Categories Table -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
-                        <div class="flex items-center justify-between">
-                            <h3 class="font-bold text-lg">Categories Management</h3>
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <h3 class="font-bold text-lg">Categories Management</h3>
+                                <p class="text-xs text-slate-500">Excel Format: [Sr, Category Name] or [Category Name]</p>
+                            </div>
                             <div class="flex gap-2">
                                 <button onclick="openCategoryModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Category</button>
                                 <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer">
-                                    Import Excel <input type="file" accept=".xlsx, .xls" class="hidden" onchange="importExcelData(event, 'categories')">
+                                    Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'categories')">
                                 </label>
+                                ${state.categories.length > 0 ? `<button onclick="clearCollection('categories')" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold rounded-xl text-sm">Clear All</button>` : ''}
                             </div>
                         </div>
                         <table class="w-full text-left text-sm border">
@@ -735,8 +1290,8 @@
                                 ${state.categories.length === 0 ? `<tr><td colspan="3" class="p-4 text-center text-slate-400">No categories found. Add or import via Excel.</td></tr>` :
                                     state.categories.map(c => `
                                         <tr>
-                                            <td class="p-3 border font-mono">${c.id}</td>
-                                            <td class="p-3 border font-semibold">${c.name}</td>
+                                            <td class="p-3 border font-mono">${escapeHtml(c.id)}</td>
+                                            <td class="p-3 border font-semibold">${escapeHtml(c.name)}</td>
                                             <td class="p-3 border text-right space-x-2">
                                                 <button onclick="openCategoryModal('${c.id}')" class="text-blue-600 font-bold">Edit</button>
                                                 <button onclick="deleteRecord('categories', '${c.id}')" class="text-rose-600 font-bold">Delete</button>
@@ -747,28 +1302,68 @@
                         </table>
                     </div>
 
+                    <!-- Items Table -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
-                        <div class="flex items-center justify-between">
-                            <h3 class="font-bold text-lg">Item Master Management</h3>
-                            <div class="flex gap-2">
+                        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b">
+                            <div class="flex items-center gap-3">
+                                <div>
+                                    <h3 class="font-bold text-lg">Item Master Management</h3>
+                                    <p class="text-xs text-slate-500">Filter or import items under specific categories</p>
+                                </div>
+                                <select id="filter-cat-select" onchange="itemMasterFilterCatId = this.value; renderMasterItemsView(document.getElementById('main-content'))" class="px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold text-blue-700">
+                                    <option value="ALL">-- All Categories (${state.items.length} items) --</option>
+                                    ${state.categories.map(c => `<option value="${c.id}" ${c.id === itemMasterFilterCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button onclick="deleteSelectedItems()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Selected
+                                </button>
                                 <button onclick="openItemModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Item</button>
                                 <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer">
-                                    Import Excel <input type="file" accept=".xlsx, .xls" class="hidden" onchange="importExcelData(event, 'items')">
+                                    Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'items')">
                                 </label>
                             </div>
                         </div>
+
+                        <div class="flex items-center justify-between bg-blue-50/70 p-3 rounded-xl border border-blue-100 text-xs">
+                            <span class="font-bold text-blue-900 flex items-center gap-1.5">
+                                <i data-lucide="info" class="w-4 h-4 text-blue-600"></i> Excel Import Target Category:
+                            </span>
+                            <select id="import-target-cat" onchange="selectedImportCategoryId = this.value" class="px-3 py-1.5 bg-white border border-blue-200 rounded-lg font-bold text-blue-800">
+                                ${state.categories.length === 0 ? `<option value="">No Categories Available</option>` : ''}
+                                ${state.categories.map(c => `<option value="${c.id}" ${c.id === selectedImportCategoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+                            </select>
+                        </div>
+
                         <table class="w-full text-left text-sm border">
-                            <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">Code</th><th class="p-3 border">Item Name</th><th class="p-3 border">Unit</th><th class="p-3 border">Category</th><th class="p-3 border text-right">Actions</th></tr></thead>
+                            <thead>
+                                <tr class="bg-slate-100 font-bold text-xs">
+                                    <th class="p-3 border text-center w-10">
+                                        <input type="checkbox" id="select-all-items" onchange="toggleSelectAll('item-checkbox', this.checked)" class="rounded text-blue-600 w-4 h-4">
+                                    </th>
+                                    <th class="p-3 border w-12">Sr</th>
+                                    <th class="p-3 border">Code</th>
+                                    <th class="p-3 border">Item Name</th>
+                                    <th class="p-3 border">Unit</th>
+                                    <th class="p-3 border">Category</th>
+                                    <th class="p-3 border text-right">Actions</th>
+                                </tr>
+                            </thead>
                             <tbody>
-                                ${state.items.length === 0 ? `<tr><td colspan="5" class="p-4 text-center text-slate-400">No items found. Add or import via Excel.</td></tr>` :
-                                    state.items.map(it => {
+                                ${filteredItems.length === 0 ? `<tr><td colspan="7" class="p-6 text-center text-slate-400">No items found for this view. Add or import via Excel.</td></tr>` :
+                                    filteredItems.map((it, idx) => {
                                         const cat = state.categories.find(c => c.id === it.categoryId);
                                         return `
                                             <tr>
-                                                <td class="p-3 border font-mono">${it.code}</td>
-                                                <td class="p-3 border font-semibold">${it.name}</td>
-                                                <td class="p-3 border">${it.unit}</td>
-                                                <td class="p-3 border">${cat ? cat.name : '-'}</td>
+                                                <td class="p-3 border text-center">
+                                                    <input type="checkbox" value="${it.id}" class="item-checkbox rounded text-blue-600 w-4 h-4">
+                                                </td>
+                                                <td class="p-3 border text-slate-500 font-mono">${idx + 1}</td>
+                                                <td class="p-3 border font-mono font-bold">${escapeHtml(it.code)}</td>
+                                                <td class="p-3 border font-semibold">${escapeHtml(it.name)}</td>
+                                                <td class="p-3 border">${escapeHtml(it.unit)}</td>
+                                                <td class="p-3 border">${cat ? escapeHtml(cat.name) : '<span class="text-rose-500 font-bold">Unassigned</span>'}</td>
                                                 <td class="p-3 border text-right space-x-2">
                                                     <button onclick="openItemModal('${it.id}')" class="text-blue-600 font-bold">Edit</button>
                                                     <button onclick="deleteRecord('items', '${it.id}')" class="text-rose-600 font-bold">Delete</button>
@@ -783,6 +1378,32 @@
             `;
         }
 
+        window.toggleSelectAll = function(className, isChecked) {
+            document.querySelectorAll('.' + className).forEach(cb => cb.checked = isChecked);
+        };
+
+        window.deleteSelectedItems = async function() {
+            const checked = document.querySelectorAll('.item-checkbox:checked');
+            if (checked.length === 0) return showToast('Please select at least one item!', 'warning');
+            const ids = Array.from(checked).map(cb => cb.value);
+
+            openModal({
+                title: 'Confirm Bulk Deletion',
+                bodyHtml: `<p>Delete <strong>${ids.length}</strong> selected item(s)?</p>`,
+                confirmText: 'Delete Selected',
+                onConfirm: async () => {
+                    for (const id of ids) {
+                        state.items = state.items.filter(i => i.id !== id);
+                        try { await deleteDoc(doc(firestoreDb, 'items', id)); } catch (e) {}
+                    }
+                    saveToLocalStorage();
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast(`Deleted ${ids.length} items successfully!`, 'success');
+                }
+            });
+        };
+
         window.openCategoryModal = function(id = null) {
             const cat = id ? state.categories.find(c => c.id === id) : { id: 'CAT-' + Date.now(), name: '' };
             openModal({
@@ -790,7 +1411,7 @@
                 bodyHtml: `
                     <div class="space-y-3">
                         <label class="block text-xs font-bold uppercase text-slate-500">Category Name</label>
-                        <input type="text" id="m-cat-name" value="${cat.name}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                        <input type="text" id="m-cat-name" value="${escapeHtml(cat.name)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
                     </div>
                 `,
                 onConfirm: async () => {
@@ -806,27 +1427,30 @@
         };
 
         window.openItemModal = function(id = null) {
-            const item = id ? state.items.find(i => i.id === id) : { id: 'ITM-' + Date.now(), code: '', name: '', unit: 'PCS', categoryId: state.categories[0]?.id || '' };
+            if (state.categories.length === 0) {
+                return showToast('Please create at least one category before adding items!', 'error');
+            }
+            const item = id ? state.items.find(i => i.id === id) : { id: 'ITM-' + Date.now(), code: '', name: '', unit: 'PCS', categoryId: selectedImportCategoryId || state.categories[0].id };
             openModal({
                 title: id ? 'Edit Item' : 'Add Item',
                 bodyHtml: `
                     <div class="space-y-3">
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Item Code</label>
-                            <input type="text" id="m-item-code" value="${item.code}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                            <input type="text" id="m-item-code" value="${escapeHtml(item.code)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
                         </div>
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Item Name</label>
-                            <input type="text" id="m-item-name" value="${item.name}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                            <input type="text" id="m-item-name" value="${escapeHtml(item.name)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Unit (e.g. PCS, KG, PACK)</label>
-                            <input type="text" id="m-item-unit" value="${item.unit}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Unit (e.g. BOX, MEAL, PCS, KG)</label>
+                            <input type="text" id="m-item-unit" value="${escapeHtml(item.unit)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
                         </div>
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Category</label>
                             <select id="m-item-cat" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
-                                ${state.categories.map(c => `<option value="${c.id}" ${c.id === item.categoryId ? 'selected' : ''}>${c.name}</option>`).join('')}
+                                ${state.categories.map(c => `<option value="${c.id}" ${c.id === item.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
                             </select>
                         </div>
                     </div>
@@ -849,25 +1473,44 @@
         function renderMasterLocationsView(container) {
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
+                    <!-- Branches Management -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
-                        <div class="flex items-center justify-between">
-                            <h3 class="font-bold text-lg">Branches Management</h3>
-                            <div class="flex gap-2">
+                        <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b">
+                            <div>
+                                <h3 class="font-bold text-lg">Branches Management</h3>
+                                <p class="text-xs text-slate-500">Excel Format: [Sr | Branch ID / Code | Branch Name | Address]</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="deleteSelectedBranches()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Selected
+                                </button>
                                 <button onclick="openBranchModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Branch</button>
                                 <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer">
-                                    Import Excel <input type="file" accept=".xlsx, .xls" class="hidden" onchange="importExcelData(event, 'branches')">
+                                    Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'branches')">
                                 </label>
+                                ${state.branches.length > 0 ? `<button onclick="clearCollection('branches')" class="px-3 py-2 bg-rose-50 text-rose-600 font-semibold rounded-xl text-sm">Clear All</button>` : ''}
                             </div>
                         </div>
                         <table class="w-full text-left text-sm border">
-                            <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">Code</th><th class="p-3 border">Branch Name</th><th class="p-3 border">Address</th><th class="p-3 border text-right">Actions</th></tr></thead>
+                            <thead>
+                                <tr class="bg-slate-100 font-bold text-xs">
+                                    <th class="p-3 border text-center w-10"><input type="checkbox" onchange="toggleSelectAll('branch-checkbox', this.checked)" class="rounded text-blue-600 w-4 h-4"></th>
+                                    <th class="p-3 border w-12">Sr</th>
+                                    <th class="p-3 border">Branch ID (Code)</th>
+                                    <th class="p-3 border">Branch Name</th>
+                                    <th class="p-3 border">Address</th>
+                                    <th class="p-3 border text-right">Actions</th>
+                                </tr>
+                            </thead>
                             <tbody>
-                                ${state.branches.length === 0 ? `<tr><td colspan="4" class="p-4 text-center text-slate-400">No branches configured. Add or import via Excel.</td></tr>` :
-                                    state.branches.map(b => `
+                                ${state.branches.length === 0 ? `<tr><td colspan="6" class="p-4 text-center text-slate-400">No branches configured. Add or import via Excel.</td></tr>` :
+                                    state.branches.map((b, idx) => `
                                         <tr>
-                                            <td class="p-3 border font-mono">${b.code}</td>
-                                            <td class="p-3 border font-semibold">${b.name}</td>
-                                            <td class="p-3 border">${b.address || '-'}</td>
+                                            <td class="p-3 border text-center"><input type="checkbox" value="${b.id}" class="branch-checkbox rounded text-blue-600 w-4 h-4"></td>
+                                            <td class="p-3 border text-slate-500 font-mono">${idx + 1}</td>
+                                            <td class="p-3 border font-mono font-bold">${escapeHtml(b.code)}</td>
+                                            <td class="p-3 border font-semibold">${escapeHtml(b.name)}</td>
+                                            <td class="p-3 border">${escapeHtml(b.address || '-')}</td>
                                             <td class="p-3 border text-right space-x-2">
                                                 <button onclick="openBranchModal('${b.id}')" class="text-blue-600 font-bold">Edit</button>
                                                 <button onclick="deleteRecord('branches', '${b.id}')" class="text-rose-600 font-bold">Delete</button>
@@ -878,20 +1521,44 @@
                         </table>
                     </div>
 
+                    <!-- Destinations Management -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
-                        <div class="flex items-center justify-between">
-                            <h3 class="font-bold text-lg">Destinations Management (Factory & Warehouses)</h3>
-                            <button onclick="openDestinationModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Destination</button>
+                        <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b">
+                            <div>
+                                <h3 class="font-bold text-lg">Destinations Management (Factory & Warehouses)</h3>
+                                <p class="text-xs text-slate-500">Excel Format: [Sr | Destination Name | Type]</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="deleteSelectedDestinations()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Selected
+                                </button>
+                                <button onclick="openDestinationModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Destination</button>
+                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer">
+                                    Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'destinations')">
+                                </label>
+                                ${state.destinations.length > 0 ? `<button onclick="clearCollection('destinations')" class="px-3 py-2 bg-rose-50 text-rose-600 font-semibold rounded-xl text-sm">Clear All</button>` : ''}
+                            </div>
                         </div>
                         <table class="w-full text-left text-sm border">
-                            <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">ID</th><th class="p-3 border">Destination Name</th><th class="p-3 border">Type</th><th class="p-3 border text-right">Actions</th></tr></thead>
+                            <thead>
+                                <tr class="bg-slate-100 font-bold text-xs">
+                                    <th class="p-3 border text-center w-10"><input type="checkbox" onchange="toggleSelectAll('dest-checkbox', this.checked)" class="rounded text-blue-600 w-4 h-4"></th>
+                                    <th class="p-3 border w-12">Sr</th>
+                                    <th class="p-3 border">Destination ID</th>
+                                    <th class="p-3 border">Destination Name</th>
+                                    <th class="p-3 border">Type</th>
+                                    <th class="p-3 border text-right">Actions</th>
+                                </tr>
+                            </thead>
                             <tbody>
-                                ${state.destinations.length === 0 ? `<tr><td colspan="4" class="p-4 text-center text-slate-400">No destinations configured.</td></tr>` :
-                                    state.destinations.map(d => `
+                                ${state.destinations.length === 0 ? `<tr><td colspan="6" class="p-4 text-center text-slate-400">No destinations configured. Add or import via Excel.</td></tr>` :
+                                    state.destinations.map((d, idx) => `
                                         <tr>
-                                            <td class="p-3 border font-mono">${d.id}</td>
-                                            <td class="p-3 border font-semibold">${d.name}</td>
-                                            <td class="p-3 border">${d.type}</td>
+                                            <td class="p-3 border text-center"><input type="checkbox" value="${d.id}" class="dest-checkbox rounded text-blue-600 w-4 h-4"></td>
+                                            <td class="p-3 border text-slate-500 font-mono">${idx + 1}</td>
+                                            <td class="p-3 border font-mono">${escapeHtml(d.id)}</td>
+                                            <td class="p-3 border font-semibold">${escapeHtml(d.name)}</td>
+                                            <td class="p-3 border">${escapeHtml(d.type)}</td>
                                             <td class="p-3 border text-right space-x-2">
                                                 <button onclick="openDestinationModal('${d.id}')" class="text-blue-600 font-bold">Edit</button>
                                                 <button onclick="deleteRecord('destinations', '${d.id}')" class="text-rose-600 font-bold">Delete</button>
@@ -911,16 +1578,16 @@
                 title: id ? 'Edit Branch' : 'Add Branch',
                 bodyHtml: `
                     <div class="space-y-3">
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Branch Code</label><input type="text" id="m-b-code" value="${b.code}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Branch Name</label><input type="text" id="m-b-name" value="${b.name}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Address</label><input type="text" id="m-b-addr" value="${b.address}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Branch ID / Code</label><input type="text" id="m-b-code" value="${escapeHtml(b.code)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Branch Name</label><input type="text" id="m-b-name" value="${escapeHtml(b.name)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Address</label><input type="text" id="m-b-addr" value="${escapeHtml(b.address)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
                     </div>
                 `,
                 onConfirm: async () => {
                     b.code = document.getElementById('m-b-code').value.trim();
                     b.name = document.getElementById('m-b-name').value.trim();
                     b.address = document.getElementById('m-b-addr').value.trim();
-                    if(!b.name || !b.code) return showToast('Name and code are required!', 'error');
+                    if(!b.name || !b.code) return showToast('Branch ID and Name are required!', 'error');
                     await dbSaveRecord('branches', b);
                     closeModal();
                     renderCurrentRoute();
@@ -935,18 +1602,62 @@
                 title: id ? 'Edit Destination' : 'Add Destination',
                 bodyHtml: `
                     <div class="space-y-3">
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Destination Name</label><input type="text" id="m-d-name" value="${d.name}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Type</label><input type="text" id="m-d-type" value="${d.type}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Destination Name</label><input type="text" id="m-d-name" value="${escapeHtml(d.name)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Type</label><input type="text" id="m-d-type" value="${escapeHtml(d.type)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
                     </div>
                 `,
                 onConfirm: async () => {
                     d.name = document.getElementById('m-d-name').value.trim();
                     d.type = document.getElementById('m-d-type').value.trim();
-                    if(!d.name) return showToast('Name is required!', 'error');
+                    if(!d.name) return showToast('Destination Name is required!', 'error');
                     await dbSaveRecord('destinations', d);
                     closeModal();
                     renderCurrentRoute();
                     showToast('Destination saved successfully!');
+                }
+            });
+        };
+
+        window.deleteSelectedBranches = async function() {
+            const checked = document.querySelectorAll('.branch-checkbox:checked');
+            if (checked.length === 0) return showToast('Please select at least one branch!', 'warning');
+            const ids = Array.from(checked).map(cb => cb.value);
+
+            openModal({
+                title: 'Confirm Bulk Deletion',
+                bodyHtml: `<p>Delete <strong>${ids.length}</strong> selected branch(es)?</p>`,
+                confirmText: 'Delete Selected',
+                onConfirm: async () => {
+                    for (const id of ids) {
+                        state.branches = state.branches.filter(b => b.id !== id);
+                        try { await deleteDoc(doc(firestoreDb, 'branches', id)); } catch (e) {}
+                    }
+                    saveToLocalStorage();
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast(`Deleted ${ids.length} branch(es) successfully!`, 'success');
+                }
+            });
+        };
+
+        window.deleteSelectedDestinations = async function() {
+            const checked = document.querySelectorAll('.dest-checkbox:checked');
+            if (checked.length === 0) return showToast('Please select at least one destination!', 'warning');
+            const ids = Array.from(checked).map(cb => cb.value);
+
+            openModal({
+                title: 'Confirm Bulk Deletion',
+                bodyHtml: `<p>Delete <strong>${ids.length}</strong> selected destination(s)?</p>`,
+                confirmText: 'Delete Selected',
+                onConfirm: async () => {
+                    for (const id of ids) {
+                        state.destinations = state.destinations.filter(d => d.id !== id);
+                        try { await deleteDoc(doc(firestoreDb, 'destinations', id)); } catch (e) {}
+                    }
+                    saveToLocalStorage();
+                    closeModal();
+                    renderCurrentRoute();
+                    showToast(`Deleted ${ids.length} destination(s) successfully!`, 'success');
                 }
             });
         };
@@ -956,23 +1667,32 @@
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                     <div class="flex items-center justify-between">
-                        <h3 class="font-bold text-lg">User Accounts & Role Permissions</h3>
+                        <div>
+                            <h3 class="font-bold text-lg">User Accounts & Role Permissions</h3>
+                            <p class="text-xs text-slate-500">Passwords are encrypted with SHA-256 before saving to Firestore</p>
+                        </div>
                         <button onclick="openUserModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add New User</button>
                     </div>
                     <table class="w-full text-left text-sm border">
-                        <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">Username</th><th class="p-3 border">Full Name</th><th class="p-3 border">Role / Permission</th><th class="p-3 border text-right">Actions</th></tr></thead>
+                        <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">Username</th><th class="p-3 border">Full Name</th><th class="p-3 border">Role / Permission</th><th class="p-3 border">Assigned Branch / Dest</th><th class="p-3 border text-right">Actions</th></tr></thead>
                         <tbody>
-                            ${state.users.map(u => `
-                                <tr>
-                                    <td class="p-3 border font-mono font-bold">${u.username}</td>
-                                    <td class="p-3 border font-semibold">${u.fullName}</td>
-                                    <td class="p-3 border"><span class="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold text-xs rounded">${u.role}</span></td>
-                                    <td class="p-3 border text-right space-x-2">
-                                        <button onclick="openUserModal('${u.id}')" class="text-blue-600 font-bold">Edit</button>
-                                        ${u.username !== 'admin' ? `<button onclick="deleteRecord('users', '${u.id}')" class="text-rose-600 font-bold">Delete</button>` : ''}
-                                    </td>
-                                </tr>
-                            `).join('')}
+                            ${state.users.map(u => {
+                                const br = state.branches.find(b => b.id === u.branchId);
+                                const dst = state.destinations.find(d => d.id === u.destinationId);
+                                const assigned = br ? `Branch: ${br.name}` : (dst ? `Dest: ${dst.name}` : 'All / Global');
+                                return `
+                                    <tr>
+                                        <td class="p-3 border font-mono font-bold">${escapeHtml(u.username)}</td>
+                                        <td class="p-3 border font-semibold">${escapeHtml(u.fullName)}</td>
+                                        <td class="p-3 border"><span class="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold text-xs rounded">${escapeHtml(u.role)}</span></td>
+                                        <td class="p-3 border text-xs text-slate-600">${escapeHtml(assigned)}</td>
+                                        <td class="p-3 border text-right space-x-2">
+                                            <button onclick="openUserModal('${u.id}')" class="text-blue-600 font-bold">Edit</button>
+                                            ${u.username !== 'admin' ? `<button onclick="deleteRecord('users', '${u.id}')" class="text-rose-600 font-bold">Delete</button>` : ''}
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>
@@ -980,36 +1700,169 @@
         }
 
         window.openUserModal = function(id = null) {
-            const u = id ? state.users.find(x => x.id === id) : { id: 'USR-' + Date.now(), username: '', password: '1234', fullName: '', role: 'branch' };
+            const u = id ? state.users.find(x => x.id === id) : { id: 'USR-' + Date.now(), username: '', passwordHash: '', fullName: '', role: 'branch', branchId: '', destinationId: '' };
             openModal({
                 title: id ? 'Edit User & Permissions' : 'Add User Account',
                 bodyHtml: `
                     <div class="space-y-3">
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Username</label><input type="text" id="m-u-name" value="${u.username}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Password</label><input type="text" id="m-u-pass" value="${u.password}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Full Name</label><input type="text" id="m-u-full" value="${u.fullName}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Username</label><input type="text" id="m-u-name" value="${escapeHtml(u.username)}" ${u.username === 'admin' ? 'readonly' : ''} class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">${id ? 'New Password (leave blank to keep current)' : 'Password'}</label><input type="password" id="m-u-pass" placeholder="Enter password" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Full Name</label><input type="text" id="m-u-full" value="${escapeHtml(u.fullName)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Role / Permission</label>
                             <select id="m-u-role" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
                                 <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrator (Full Access)</option>
                                 <option value="branch" ${u.role === 'branch' ? 'selected' : ''}>Branch User (Order Submission)</option>
-                                <option value="factory_warehouse" ${u.role === 'factory_warehouse' ? 'selected' : ''}>Factory & Warehouse (Fulfill & Challan)</option>
+                                <option value="factory_warehouse" ${u.role === 'factory_warehouse' ? 'selected' : ''}>Destination User (Factory/Warehouse Matrix & Challan)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Restrict to Specific Branch (Optional)</label>
+                            <select id="m-u-branch" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                                <option value="">-- Any Branch --</option>
+                                ${state.branches.map(b => `<option value="${b.id}" ${b.id === u.branchId ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Restrict to Specific Destination (Optional)</label>
+                            <select id="m-u-dest" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                                <option value="">-- All Destinations --</option>
+                                ${state.destinations.map(d => `<option value="${d.id}" ${d.id === u.destinationId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
                             </select>
                         </div>
                     </div>
                 `,
                 onConfirm: async () => {
-                    u.username = document.getElementById('m-u-name').value.trim();
-                    u.password = document.getElementById('m-u-pass').value.trim();
-                    u.fullName = document.getElementById('m-u-full').value.trim();
+                    const newUsername = document.getElementById('m-u-name').value.trim();
+                    const rawPass = document.getElementById('m-u-pass').value;
+                    if (!newUsername) return showToast('Username is required!', 'error');
+                    if (!id && !rawPass) return showToast('Password is required for new users!', 'error');
+
+                    u.username = newUsername;
+                    if (rawPass) {
+                        u.passwordHash = await hashPassword(rawPass);
+                        delete u.password;
+                    }
+                    u.fullName = document.getElementById('m-u-full').value.trim() || newUsername;
                     u.role = document.getElementById('m-u-role').value;
-                    if(!u.username) return showToast('Username is required!', 'error');
+                    u.branchId = document.getElementById('m-u-branch').value;
+                    u.destinationId = document.getElementById('m-u-dest').value;
+
                     await dbSaveRecord('users', u);
                     closeModal();
                     renderCurrentRoute();
-                    showToast('User saved successfully!');
+                    showToast('User saved with encrypted credentials!');
                 }
             });
+        };
+
+        // ==================== 8. COMPANY & SYSTEM SETTINGS (ADMIN) ====================
+        function renderSystemSettingsView(container) {
+            const s = state.settings || DEFAULT_SETTINGS;
+            container.innerHTML = `
+                <div class="max-w-3xl mx-auto bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-200 space-y-6">
+                    <div class="flex items-center justify-between border-b pb-4">
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-900">Company Profile & Software Branding</h3>
+                            <p class="text-xs text-slate-500">Displayed on the Login Screen, Navigation Sidebar, and Delivery Challans</p>
+                        </div>
+                        <button onclick="saveSystemSettings()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md flex items-center gap-2">
+                            <i data-lucide="save" class="w-4 h-4"></i> Save Settings
+                        </button>
+                    </div>
+
+                    <!-- Logo Upload Section -->
+                    <div class="flex flex-col sm:flex-row items-center gap-6 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                        <div id="settings-logo-preview" class="w-24 h-24 bg-white border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 p-2">
+                            ${s.logoDataUrl ? `<img src="${s.logoDataUrl}" class="max-w-full max-h-full object-contain">` : `<i data-lucide="image" class="w-8 h-8 text-slate-400"></i>`}
+                        </div>
+                        <div class="space-y-2 text-center sm:text-left">
+                            <div class="font-bold text-sm text-slate-800">Company Logo</div>
+                            <p class="text-xs text-slate-500">Upload a PNG, JPG, or SVG logo (max 500KB recommended for fast Firestore sync).</p>
+                            <div class="flex flex-wrap justify-center sm:justify-start gap-2 pt-1">
+                                <label class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs cursor-pointer transition">
+                                    Upload Logo <input type="file" accept="image/*" class="hidden" onchange="handleLogoUpload(event)">
+                                </label>
+                                ${s.logoDataUrl ? `<button type="button" onclick="removeCompanyLogo()" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold rounded-xl text-xs">Remove Logo</button>` : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Form Fields -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Software Title</label>
+                            <input type="text" id="set-software-name" value="${escapeHtml(s.softwareName)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Company Name</label>
+                            <input type="text" id="set-company-name" value="${escapeHtml(s.companyName)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tagline / Subtitle</label>
+                            <input type="text" id="set-tagline" value="${escapeHtml(s.tagline)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Company Address</label>
+                            <input type="text" id="set-address" value="${escapeHtml(s.address)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Contact Phone</label>
+                            <input type="text" id="set-phone" value="${escapeHtml(s.phone)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Contact Email / Website</label>
+                            <input type="text" id="set-email" value="${escapeHtml(s.email)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">CR / VAT / Registration Info (Optional)</label>
+                            <input type="text" id="set-tax" value="${escapeHtml(s.taxId)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.handleLogoUpload = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (file.size > 800 * 1024) {
+                return showToast('Logo file is too large (max 800KB). Please compress it first.', 'error');
+            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                state.settings.logoDataUrl = e.target.result;
+                renderSystemSettingsView(document.getElementById('main-content'));
+                lucide.createIcons();
+                showToast('Logo loaded! Click "Save Settings" to apply.', 'info');
+            };
+            reader.readAsDataURL(file);
+        };
+
+        window.removeCompanyLogo = function() {
+            state.settings.logoDataUrl = '';
+            renderSystemSettingsView(document.getElementById('main-content'));
+            lucide.createIcons();
+        };
+
+        window.saveSystemSettings = async function() {
+            state.settings = {
+                id: 'MAIN_SETTINGS',
+                softwareName: document.getElementById('set-software-name').value.trim() || 'StockTransfer ERP',
+                companyName: document.getElementById('set-company-name').value.trim() || 'Company Name',
+                tagline: document.getElementById('set-tagline').value.trim(),
+                address: document.getElementById('set-address').value.trim(),
+                phone: document.getElementById('set-phone').value.trim(),
+                email: document.getElementById('set-email').value.trim(),
+                taxId: document.getElementById('set-tax').value.trim(),
+                logoDataUrl: state.settings.logoDataUrl || ''
+            };
+            saveToLocalStorage();
+            try {
+                await setDoc(doc(firestoreDb, 'settings', 'MAIN_SETTINGS'), state.settings);
+            } catch (e) {}
+            applyCompanyBranding();
+            showToast('Company & software information saved successfully!', 'success');
         };
 
         window.deleteRecord = async function(colName, id) {
@@ -1026,7 +1879,26 @@
             });
         };
 
-        // Excel Import Utility
+        // ==================== SMART EXCEL IMPORT ====================
+        function isHeaderRow(cells) {
+            const joined = cells.map(c => String(c || '').trim().toLowerCase()).join('|');
+            return (
+                joined.includes('item name') ||
+                joined.includes('item code') ||
+                joined.includes('category name') ||
+                joined.includes('branch name') ||
+                joined.includes('destination name') ||
+                /^(sr|s\.no|sl|no|id|#)\|/.test(joined) ||
+                /\|(code|name|unit|category|address|type)(\||$)/.test(joined)
+            );
+        }
+
+        function isSerialNumber(val) {
+            if (typeof val === 'number') return true;
+            const str = String(val || '').trim();
+            return /^\d+$/.test(str);
+        }
+
         window.importExcelData = function(event, colName) {
             const file = event.target.files[0];
             if (!file) return;
@@ -1036,35 +1908,91 @@
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
                     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const json = XLSX.utils.sheet_to_json(firstSheet);
-                    
+                    const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+
                     let count = 0;
-                    for (let row of json) {
+                    const batchId = Date.now();
+
+                    for (let i = 0; i < rows.length; i++) {
+                        const rawRow = rows[i];
+                        if (!rawRow || rawRow.every(cell => String(cell).trim() === '')) continue;
+                        if (i === 0 && isHeaderRow(rawRow)) continue;
+
+                        const cells = rawRow.map(c => String(c ?? '').trim());
+
                         if (colName === 'categories') {
-                            const rec = { id: row.id || 'CAT-' + Date.now() + Math.random(), name: row.name || row.Name };
-                            if (rec.name) { await dbSaveRecord('categories', rec); count++; }
+                            const catName = (cells.length >= 2 && isSerialNumber(cells[0])) ? cells[1] : cells[0];
+                            if (catName) {
+                                const rec = { id: 'CAT-' + (batchId + i), name: catName };
+                                await dbSaveRecord('categories', rec);
+                                count++;
+                            }
                         } else if (colName === 'items') {
+                            if (!selectedImportCategoryId) {
+                                return showToast('Please select a Target Category for the imported items first!', 'error');
+                            }
+                            let offset = (cells.length >= 3 && isSerialNumber(cells[0])) ? 1 : 0;
+                            const code = cells[offset] || '';
+                            const name = cells[offset + 1] || '';
+                            const unit = (cells[offset + 2] || 'PCS').toUpperCase();
+
+                            if (!code && !name) continue;
+
                             const rec = {
-                                id: row.id || 'ITM-' + Date.now() + Math.random(),
-                                code: row.code || row.Code || 'CODE',
-                                name: row.name || row.Name || 'Item',
-                                unit: row.unit || row.Unit || 'PCS',
-                                categoryId: row.categoryId || state.categories[0]?.id || 'CAT-01'
+                                id: 'ITM-' + (batchId + i),
+                                code: code || ('ITM-' + (i + 1)),
+                                name: name || code,
+                                unit: unit || 'PCS',
+                                categoryId: selectedImportCategoryId
                             };
-                            if (rec.name) { await dbSaveRecord('items', rec); count++; }
+                            await dbSaveRecord('items', rec);
+                            count++;
                         } else if (colName === 'branches') {
-                            const rec = {
-                                id: row.id || 'BR-' + Date.now() + Math.random(),
-                                code: row.code || row.Code || 'BR',
-                                name: row.name || row.Name || 'Branch',
-                                address: row.address || row.Address || ''
-                            };
-                            if (rec.name) { await dbSaveRecord('branches', rec); count++; }
+                            let offset = (cells.length >= 2 && isSerialNumber(cells[0])) ? 1 : 0;
+                            let code = '', name = '', address = '';
+                            if (cells.length - offset >= 2) {
+                                code = cells[offset];
+                                name = cells[offset + 1];
+                                address = cells[offset + 2] || '';
+                            } else {
+                                name = cells[offset];
+                                code = name.substring(0, 3).toUpperCase();
+                            }
+                            if (name) {
+                                const rec = {
+                                    id: 'BR-' + (batchId + i),
+                                    code: code || 'BR',
+                                    name: name,
+                                    address: address
+                                };
+                                await dbSaveRecord('branches', rec);
+                                count++;
+                            }
+                        } else if (colName === 'destinations') {
+                            let offset = (cells.length >= 2 && isSerialNumber(cells[0])) ? 1 : 0;
+                            const name = cells[offset] || '';
+                            const type = cells[offset + 1] || 'Warehouse';
+                            if (name) {
+                                const rec = {
+                                    id: 'DST-' + (batchId + i),
+                                    name: name,
+                                    type: type
+                                };
+                                await dbSaveRecord('destinations', rec);
+                                count++;
+                            }
                         }
                     }
-                    showToast(`Successfully imported ${count} records from Excel!`, 'success');
+
+                    event.target.value = '';
+                    if (count > 0) {
+                        showToast(`Successfully imported ${count} records from Excel!`, 'success');
+                    } else {
+                        showToast('No valid rows found in the Excel file.', 'warning');
+                    }
                     renderCurrentRoute();
                 } catch (err) {
+                    console.error(err);
                     showToast('Failed to parse Excel file.', 'error');
                 }
             };
