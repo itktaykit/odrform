@@ -269,6 +269,58 @@
         const TODAY = new Date().toISOString().split('T')[0];
         const TOMORROW = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
+        // Single source of truth for all menus & submenus; automatically discovered by User Role Permissions
+        const SYSTEM_MENU_REGISTRY = [
+            {
+                id: 'order-transaction',
+                label: 'Order Transaction',
+                icon: 'arrow-left-right',
+                children: [
+                    { id: 'order-form', label: 'Stock Transfer Order Form', icon: 'clipboard-edit', defaultRoles: ['admin', 'branch'] },
+                    { id: 'my-orders', label: 'Branch Order History', icon: 'history', defaultRoles: ['admin', 'branch', 'factory_warehouse'] },
+                    { id: 'order-matrix', label: 'Consolidated Order Matrix', icon: 'table-2', defaultRoles: ['admin', 'factory_warehouse'] },
+                    { id: 'delivery-challan', label: 'Delivery Challan & Print', icon: 'printer', defaultRoles: ['admin', 'factory_warehouse'] }
+                ]
+            },
+            {
+                id: 'app-settings',
+                label: 'App Settings',
+                icon: 'sliders-horizontal',
+                children: [
+                    { id: 'master-items', label: 'Categories & Item Master', icon: 'package', defaultRoles: ['admin'] },
+                    { id: 'master-locations', label: 'Branches & Destinations', icon: 'building-2', defaultRoles: ['admin'] },
+                    { id: 'master-users', label: 'User Accounts & Roles', icon: 'users', defaultRoles: ['admin'] },
+                    { id: 'system-settings', label: 'Company & System Information', icon: 'settings', defaultRoles: ['admin'] }
+                ]
+            }
+        ];
+
+        function getAllScreenIds() {
+            return SYSTEM_MENU_REGISTRY.flatMap(g => g.children.map(c => c.id));
+        }
+
+        function buildDefaultPermissionsForRole(role) {
+            const perms = {};
+            SYSTEM_MENU_REGISTRY.forEach(group => {
+                group.children.forEach(sub => {
+                    perms[sub.id] = role === 'admin' ? true : sub.defaultRoles.includes(role);
+                });
+            });
+            return perms;
+        }
+
+        function resolveUserPermissions(user) {
+            const allIds = getAllScreenIds();
+            if (!user) return {};
+            const base = buildDefaultPermissionsForRole(user.role);
+            const custom = user.permissions && typeof user.permissions === 'object' ? user.permissions : {};
+            const resolved = {};
+            allIds.forEach(id => {
+                resolved[id] = custom[id] !== undefined ? Boolean(custom[id]) : Boolean(base[id]);
+            });
+            return resolved;
+        }
+
         const DEFAULT_SETTINGS = {
             id: 'MAIN_SETTINGS',
             softwareName: 'StockTransfer ERP',
@@ -291,7 +343,7 @@
             orders: []
         };
 
-        const STORAGE_KEY = 'kty_store_order_secure_v10';
+        const STORAGE_KEY = 'kty_store_order_secure_v11';
         let state = JSON.parse(JSON.stringify(CLEAN_DEFAULT_DATA));
 
         async function ensureDefaultAdmin() {
@@ -304,7 +356,8 @@
                     fullName: 'System Administrator',
                     role: 'admin',
                     branchId: '',
-                    destinationId: ''
+                    destinationId: '',
+                    permissions: buildDefaultPermissionsForRole('admin')
                 };
                 state.users = [adminUser];
                 saveToLocalStorage();
@@ -324,7 +377,13 @@
                         branches: parsed.branches || [],
                         destinations: parsed.destinations || [],
                         categories: parsed.categories || [],
-                        items: parsed.items || [],
+                        items: (parsed.items || []).map(it => ({
+                            status: 'Active',
+                            conversionDirection: 'down',
+                            conversionFactor: 1,
+                            altUnit: '',
+                            ...it
+                        })),
                         users: parsed.users || [],
                         orders: parsed.orders || []
                     };
@@ -353,6 +412,13 @@
                         state[colName] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     }
                 }
+                state.items = (state.items || []).map(it => ({
+                    status: 'Active',
+                    conversionDirection: 'down',
+                    conversionFactor: 1,
+                    altUnit: '',
+                    ...it
+                }));
                 saveToLocalStorage();
             } catch (err) {
                 console.warn('Firestore sync warning:', err.message);
@@ -497,6 +563,14 @@
             window.addEventListener(evt, resetInactivityTimer, { passive: true });
         });
 
+        function pickInitialRouteForUser(user) {
+            const perms = resolveUserPermissions(user);
+            const preferred = user.role === 'factory_warehouse' ? 'order-matrix' : 'order-form';
+            if (perms[preferred]) return preferred;
+            const firstAllowed = getAllScreenIds().find(id => perms[id]);
+            return firstAllowed || 'my-orders';
+        }
+
         function checkExistingSession() {
             const savedUser = sessionStorage.getItem('kty_active_user');
             const expiry = sessionStorage.getItem('kty_session_expiry');
@@ -512,11 +586,7 @@
                         document.getElementById('user-display-role').textContent = currentUser.role.replace('_', ' ');
                         document.getElementById('header-role-label').textContent = `${currentUser.fullName} (${currentUser.role.toUpperCase()})`;
 
-                        if (currentUser.role === 'factory_warehouse') {
-                            currentRoute = 'order-matrix';
-                        } else {
-                            currentRoute = 'order-form';
-                        }
+                        currentRoute = pickInitialRouteForUser(currentUser);
 
                         resetInactivityTimer();
                         renderSidebarMenu();
@@ -587,11 +657,7 @@
             document.getElementById('user-display-role').textContent = currentUser.role.replace('_', ' ');
             document.getElementById('header-role-label').textContent = `${currentUser.fullName} (${currentUser.role.toUpperCase()})`;
 
-            if (currentUser.role === 'factory_warehouse') {
-                currentRoute = 'order-matrix';
-            } else {
-                currentRoute = 'order-form';
-            }
+            currentRoute = pickInitialRouteForUser(currentUser);
 
             renderSidebarMenu();
             renderCurrentRoute();
@@ -612,36 +678,12 @@
 
         function getMenuGroups() {
             if (!currentUser) return [];
-            const role = currentUser.role;
-            const groups = [
-                {
-                    id: 'order-transaction',
-                    label: 'Order Transaction',
-                    icon: 'arrow-left-right',
-                    children: [
-                        { id: 'order-form', label: 'Stock Transfer Order Form', icon: 'clipboard-edit', roles: ['admin', 'branch'] },
-                        { id: 'my-orders', label: 'Branch Order History', icon: 'history', roles: ['admin', 'branch', 'factory_warehouse'] },
-                        { id: 'order-matrix', label: 'Consolidated Order Matrix', icon: 'table-2', roles: ['admin', 'factory_warehouse'] },
-                        { id: 'delivery-challan', label: 'Delivery Challan & Print', icon: 'printer', roles: ['admin', 'factory_warehouse'] },
-                        { id: 'master-items', label: 'Categories & Item Master', icon: 'package', roles: ['admin'] }
-                    ]
-                },
-                {
-                    id: 'app-settings',
-                    label: 'App Settings',
-                    icon: 'sliders-horizontal',
-                    children: [
-                        { id: 'master-locations', label: 'Branches & Destinations', icon: 'building-2', roles: ['admin'] },
-                        { id: 'master-users', label: 'User Accounts & Roles', icon: 'users', roles: ['admin'] },
-                        { id: 'system-settings', label: 'Company & System Information', icon: 'settings', roles: ['admin'] }
-                    ]
-                }
-            ];
+            const perms = resolveUserPermissions(currentUser);
 
-            return groups
+            return SYSTEM_MENU_REGISTRY
                 .map(g => ({
                     ...g,
-                    children: g.children.filter(c => c.roles.includes(role))
+                    children: g.children.filter(c => Boolean(perms[c.id]))
                 }))
                 .filter(g => g.children.length > 0);
         }
@@ -699,13 +741,13 @@
         function renderCurrentRoute() {
             const container = document.getElementById('main-content');
             const titles = {
-                'order-form': ['Stock Transfer Order Form', 'Order Transaction • Submit branch stock requests to factory or warehouse'],
+                'order-form': ['Stock Transfer Order Form', 'Order Transaction • Select items or whole categories to submit stock requests'],
                 'my-orders': ['Branch Order History', 'Order Transaction • View and track submitted stock transfer requests'],
-                'order-matrix': ['Consolidated Order Matrix', 'Order Transaction • Review submitted orders by date, edit quantities inline, and execute challans'],
+                'order-matrix': ['Consolidated Order Matrix', 'Order Transaction • Review selected & submitted items by date, edit inline, and execute challans'],
                 'delivery-challan': ['Delivery Challan & Print', 'Order Transaction • Select branches to generate and print delivery challans sequentially'],
-                'master-items': ['Categories & Item Master', 'Order Transaction • Manage product categories, codes, and units'],
+                'master-items': ['Categories & Item Master', 'App Settings • Manage categories, active/inactive status, multi-unit conversions, and items'],
                 'master-locations': ['Branches & Destinations', 'App Settings • Configure restaurant branches and supply warehouses'],
-                'master-users': ['User Accounts & Roles', 'App Settings • Manage system credentials and access permissions'],
+                'master-users': ['User Accounts & Roles', 'App Settings • Dynamic menu/submenu permissions and user role management'],
                 'system-settings': ['Company & System Information', 'App Settings • Configure software branding, company details, and logo']
             };
             const [t, sub] = titles[currentRoute] || ['Dashboard', ''];
@@ -723,6 +765,17 @@
             lucide.createIcons();
         }
 
+        function formatUnitConversion(item) {
+            const base = item.unit || 'UNIT';
+            const alt = (item.altUnit || '').trim();
+            const factor = Number(item.conversionFactor) || 0;
+            if (!alt || factor <= 0) return '-';
+            if (item.conversionDirection === 'up') {
+                return `${factor} ${base} = 1 ${alt}`;
+            }
+            return `1 ${base} = ${factor} ${alt}`;
+        }
+
         // ==================== 1. STOCK TRANSFER ORDER FORM ====================
         let orderFormState = {
             isActive: false,
@@ -732,8 +785,13 @@
             deliveryDate: TOMORROW,
             catIdx: 0,
             searchQuery: '',
-            quantities: {}
+            quantities: {},
+            selectedItems: {}
         };
+
+        function isItemActive(item) {
+            return (item.status || 'Active') === 'Active';
+        }
 
         function renderOrderFormView(container) {
             if (currentUser?.role === 'branch' && currentUser.branchId) {
@@ -741,16 +799,21 @@
             }
             const cats = state.categories;
             const activeCat = cats[orderFormState.catIdx] || cats[0];
-            const catItems = activeCat ? state.items.filter(i => i.categoryId === activeCat.id) : [];
+            const catItems = activeCat
+                ? state.items.filter(i => i.categoryId === activeCat.id && isItemActive(i))
+                : [];
 
             const q = (orderFormState.searchQuery || '').trim().toLowerCase();
             const items = q
                 ? catItems.filter(it =>
                     String(it.name || '').toLowerCase().includes(q) ||
                     String(it.code || '').toLowerCase().includes(q) ||
-                    String(it.unit || '').toLowerCase().includes(q)
+                    String(it.unit || '').toLowerCase().includes(q) ||
+                    String(it.altUnit || '').toLowerCase().includes(q)
                 )
                 : catItems;
+
+            const allVisibleChecked = items.length > 0 && items.every(it => Boolean(orderFormState.selectedItems[it.id]));
 
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
@@ -801,13 +864,19 @@
                         ${cats.length === 0 ? `
                             <div class="p-8 text-center text-slate-500 bg-slate-50 rounded-xl">
                                 <p class="font-bold">No categories or items found.</p>
-                                <p class="text-xs mt-1">Please add categories and items in Categories & Item Master first.</p>
+                                <p class="text-xs mt-1">Please add categories and items under App Settings &gt; Categories &amp; Item Master first.</p>
                             </div>
                         ` : `
                             <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl">
-                                <select id="f-cat" class="px-4 py-2 bg-white border rounded-xl text-sm font-bold">
-                                    ${cats.map((c, i) => `<option value="${i}" ${i === orderFormState.catIdx ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
-                                </select>
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <select id="f-cat" class="px-4 py-2 bg-white border rounded-xl text-sm font-bold">
+                                        ${cats.map((c, i) => `<option value="${i}" ${i === orderFormState.catIdx ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+                                    </select>
+                                    <label class="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" id="f-cat-select-all" ${!orderFormState.isActive ? 'disabled' : ''} ${allVisibleChecked ? 'checked' : ''} onchange="toggleCategoryOrderSelection(this.checked)" class="rounded text-blue-600 w-4 h-4">
+                                        <span>Select Whole Category</span>
+                                    </label>
+                                </div>
                                 <div class="flex gap-2">
                                     <button onclick="changeCat(-1)" class="px-3 py-1.5 bg-white border hover:bg-slate-100 rounded-lg text-sm font-bold flex items-center gap-1 transition">
                                         <i data-lucide="chevron-left" class="w-4 h-4"></i> Previous
@@ -820,7 +889,7 @@
 
                             <div class="relative">
                                 <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
-                                <input type="text" id="f-item-search" value="${escapeHtml(orderFormState.searchQuery)}" placeholder="Search items by name, code, or unit..." class="w-full pl-10 pr-24 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition">
+                                <input type="text" id="f-item-search" value="${escapeHtml(orderFormState.searchQuery)}" placeholder="Search active items by name, code, unit, or conversion..." class="w-full pl-10 pr-24 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition">
                                 ${orderFormState.searchQuery ? `
                                     <button type="button" onclick="clearOrderSearch()" class="absolute right-2.5 top-2 px-2.5 py-1 text-xs font-bold text-slate-500 hover:text-slate-800 bg-slate-200/70 hover:bg-slate-200 rounded-lg transition">
                                         Clear
@@ -832,27 +901,39 @@
                                 <table class="w-full text-left">
                                     <thead class="bg-slate-100 text-xs font-bold text-slate-600 uppercase">
                                         <tr>
-                                            <th class="py-3 px-4">Sr</th>
-                                            <th class="py-3 px-4">Code</th>
+                                            <th class="py-3 px-3 text-center w-12">
+                                                <input type="checkbox" ${!orderFormState.isActive ? 'disabled' : ''} ${allVisibleChecked ? 'checked' : ''} onchange="toggleCategoryOrderSelection(this.checked)" class="rounded text-blue-600 w-4 h-4" title="Select all items in view">
+                                            </th>
+                                            <th class="py-3 px-3">Sr</th>
+                                            <th class="py-3 px-3">Code</th>
                                             <th class="py-3 px-4">Item Name</th>
-                                            <th class="py-3 px-4">Unit</th>
+                                            <th class="py-3 px-3">Unit</th>
+                                            <th class="py-3 px-3">Conversion</th>
                                             <th class="py-3 px-4 text-right">Quantity</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y text-sm">
                                         ${items.length === 0 ? `
-                                            <tr><td colspan="5" class="p-8 text-center text-slate-400 font-medium">No matching items found${q ? ` for "<strong>${escapeHtml(orderFormState.searchQuery)}</strong>"` : ''}.</td></tr>
-                                        ` : items.map((it, idx) => `
-                                            <tr>
-                                                <td class="py-3 px-4 text-slate-500 font-mono">${idx + 1}</td>
-                                                <td class="py-3 px-4 font-mono font-bold">${escapeHtml(it.code)}</td>
-                                                <td class="py-3 px-4 font-semibold">${escapeHtml(it.name)}</td>
-                                                <td class="py-3 px-4"><span class="px-2 py-0.5 bg-slate-100 text-xs font-bold rounded">${escapeHtml(it.unit)}</span></td>
-                                                <td class="py-3 px-4 text-right">
-                                                    <input type="number" min="0" step="any" data-item="${it.id}" ${!orderFormState.isActive ? 'disabled' : ''} value="${orderFormState.quantities[it.id] || ''}" oninput="updateQty('${it.id}', this.value)" class="w-28 px-3 py-1.5 text-right border rounded-xl font-bold">
-                                                </td>
-                                            </tr>
-                                        `).join('')}
+                                            <tr><td colspan="7" class="p-8 text-center text-slate-400 font-medium">No active items found${q ? ` for "<strong>${escapeHtml(orderFormState.searchQuery)}</strong>"` : ''}.</td></tr>
+                                        ` : items.map((it, idx) => {
+                                            const checked = Boolean(orderFormState.selectedItems[it.id]);
+                                            const convText = formatUnitConversion(it);
+                                            return `
+                                                <tr class="${checked ? 'bg-blue-50/40' : ''}">
+                                                    <td class="py-3 px-3 text-center">
+                                                        <input type="checkbox" ${!orderFormState.isActive ? 'disabled' : ''} ${checked ? 'checked' : ''} onchange="toggleOrderItemCheck('${it.id}', this.checked)" class="rounded text-blue-600 w-4 h-4">
+                                                    </td>
+                                                    <td class="py-3 px-3 text-slate-500 font-mono">${idx + 1}</td>
+                                                    <td class="py-3 px-3 font-mono font-bold">${escapeHtml(it.code)}</td>
+                                                    <td class="py-3 px-4 font-semibold">${escapeHtml(it.name)}</td>
+                                                    <td class="py-3 px-3"><span class="px-2 py-0.5 bg-slate-100 text-xs font-bold rounded">${escapeHtml(it.unit)}</span></td>
+                                                    <td class="py-3 px-3 text-xs font-medium text-indigo-700">${escapeHtml(convText)}</td>
+                                                    <td class="py-3 px-4 text-right">
+                                                        <input type="number" min="0" step="any" data-item="${it.id}" ${!orderFormState.isActive ? 'disabled' : ''} value="${orderFormState.quantities[it.id] || ''}" oninput="updateQty('${it.id}', this.value)" class="w-28 px-3 py-1.5 text-right border rounded-xl font-bold">
+                                                    </td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
                                     </tbody>
                                 </table>
                             </div>
@@ -884,6 +965,33 @@
             }
         }
 
+        window.toggleOrderItemCheck = function(itemId, checked) {
+            if (checked) orderFormState.selectedItems[itemId] = true;
+            else delete orderFormState.selectedItems[itemId];
+            renderOrderFormView(document.getElementById('main-content'));
+        };
+
+        window.toggleCategoryOrderSelection = function(checked) {
+            const cats = state.categories;
+            const activeCat = cats[orderFormState.catIdx] || cats[0];
+            if (!activeCat) return;
+            const catItems = state.items.filter(i => i.categoryId === activeCat.id && isItemActive(i));
+            const q = (orderFormState.searchQuery || '').trim().toLowerCase();
+            const targetItems = q
+                ? catItems.filter(it =>
+                    String(it.name || '').toLowerCase().includes(q) ||
+                    String(it.code || '').toLowerCase().includes(q) ||
+                    String(it.unit || '').toLowerCase().includes(q)
+                )
+                : catItems;
+
+            targetItems.forEach(it => {
+                if (checked) orderFormState.selectedItems[it.id] = true;
+                else delete orderFormState.selectedItems[it.id];
+            });
+            renderOrderFormView(document.getElementById('main-content'));
+        };
+
         window.clearOrderSearch = function() {
             orderFormState.searchQuery = '';
             renderOrderFormView(document.getElementById('main-content'));
@@ -898,6 +1006,7 @@
         window.cancelOrderForm = function() {
             orderFormState.isActive = false;
             orderFormState.quantities = {};
+            orderFormState.selectedItems = {};
             orderFormState.searchQuery = '';
             renderOrderFormView(document.getElementById('main-content'));
             showToast('Order entry cancelled and locked.', 'info');
@@ -905,8 +1014,12 @@
 
         window.updateQty = function(itemId, val) {
             const num = parseFloat(val);
-            if (num > 0) orderFormState.quantities[itemId] = num;
-            else delete orderFormState.quantities[itemId];
+            if (num > 0) {
+                orderFormState.quantities[itemId] = num;
+                orderFormState.selectedItems[itemId] = true;
+            } else {
+                delete orderFormState.quantities[itemId];
+            }
         };
 
         window.changeCat = function(dir) {
@@ -917,16 +1030,30 @@
         window.saveOrderForm = async function() {
             if (!orderFormState.branchId) return showToast('Please select a branch!', 'error');
             if (!orderFormState.destinationId) return showToast('Please select a destination!', 'error');
-            if (Object.keys(orderFormState.quantities).length === 0) {
-                return showToast('Please enter at least one quantity!', 'error');
+
+            // Only submit checked items that have a positive quantity
+            const submittedQuantities = {};
+            const submittedItemIds = [];
+            Object.entries(orderFormState.quantities || {}).forEach(([itemId, qty]) => {
+                const it = state.items.find(x => x.id === itemId);
+                if (orderFormState.selectedItems[itemId] && Number(qty) > 0 && it && isItemActive(it)) {
+                    submittedQuantities[itemId] = Number(qty);
+                    submittedItemIds.push(itemId);
+                }
+            });
+
+            if (submittedItemIds.length === 0) {
+                return showToast('Please check item(s) and enter quantities greater than 0 to submit!', 'error');
             }
+
             const branch = state.branches.find(b => b.id === orderFormState.branchId);
             const dest = state.destinations.find(d => d.id === orderFormState.destinationId);
 
             let existingOrder = state.orders.find(o => o.branchId === orderFormState.branchId && o.deliveryDate === orderFormState.deliveryDate && o.destinationId === orderFormState.destinationId);
 
             if (existingOrder) {
-                existingOrder.quantities = { ...(existingOrder.quantities || {}), ...orderFormState.quantities };
+                existingOrder.quantities = { ...(existingOrder.quantities || {}), ...submittedQuantities };
+                existingOrder.selectedItemIds = Array.from(new Set([...(existingOrder.selectedItemIds || []), ...submittedItemIds]));
                 existingOrder.updatedAt = new Date().toISOString();
                 existingOrder.status = 'Submitted';
                 await dbSaveRecord('orders', existingOrder);
@@ -940,7 +1067,8 @@
                     requestDate: orderFormState.requestDate,
                     deliveryDate: orderFormState.deliveryDate,
                     status: 'Submitted',
-                    quantities: { ...orderFormState.quantities },
+                    quantities: submittedQuantities,
+                    selectedItemIds: submittedItemIds,
                     updatedAt: new Date().toISOString()
                 };
                 await dbSaveRecord('orders', record);
@@ -948,8 +1076,9 @@
 
             orderFormState.isActive = false;
             orderFormState.quantities = {};
+            orderFormState.selectedItems = {};
             orderFormState.searchQuery = '';
-            showToast('Order saved and submitted successfully!', 'success');
+            showToast(`Submitted ${submittedItemIds.length} selected item(s) successfully!`, 'success');
             navigateTo('my-orders');
         };
 
@@ -1054,10 +1183,6 @@
         function renderOrderMatrixView(container) {
             const canEditMatrix = currentUser && (currentUser.role === 'admin' || currentUser.role === 'factory_warehouse');
 
-            const displayedItems = matrixFilterCatId === 'ALL'
-                ? state.items
-                : state.items.filter(it => it.categoryId === matrixFilterCatId);
-
             const destFilter = (currentUser?.role === 'factory_warehouse' && currentUser.destinationId)
                 ? currentUser.destinationId
                 : null;
@@ -1067,6 +1192,25 @@
             const activeBranches = state.branches.filter(b =>
                 dateOrders.some(o => o.branchId === b.id)
             );
+
+            // Only include active items that were selected/submitted in the date's orders
+            const selectedItemIdsForDate = new Set();
+            dateOrders.forEach(ord => {
+                const explicitIds = Array.isArray(ord.selectedItemIds) ? ord.selectedItemIds : [];
+                explicitIds.forEach(id => {
+                    if (Number(ord.quantities?.[id]) > 0) selectedItemIdsForDate.add(id);
+                });
+                Object.entries(ord.quantities || {}).forEach(([id, q]) => {
+                    if (Number(q) > 0 && explicitIds.length === 0) selectedItemIdsForDate.add(id);
+                });
+            });
+
+            const displayedItems = state.items.filter(it => {
+                if (!isItemActive(it)) return false;
+                if (!selectedItemIdsForDate.has(it.id)) return false;
+                if (matrixFilterCatId !== 'ALL' && it.categoryId !== matrixFilterCatId) return false;
+                return true;
+            });
 
             container.innerHTML = `
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
@@ -1102,7 +1246,7 @@
                     <div class="flex items-center justify-between bg-indigo-50/70 border border-indigo-100 px-4 py-2.5 rounded-xl text-xs text-indigo-900">
                         <span class="flex items-center gap-1.5 font-medium">
                             <i data-lucide="mouse-pointer-click" class="w-4 h-4 text-indigo-600 shrink-0"></i>
-                            Showing only branches with submitted orders for <strong>${escapeHtml(matrixFilterDate || 'selected date')}</strong>. Double-click any branch cell to edit (Enter or Tab to save).
+                            Showing only checked/submitted active items and branches with orders for <strong>${escapeHtml(matrixFilterDate || 'selected date')}</strong>. Double-click any branch cell to edit.
                         </span>
                     </div>
 
@@ -1129,16 +1273,10 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-300 bg-white">
-                                ${activeBranches.length === 0 ? `
+                                ${activeBranches.length === 0 || displayedItems.length === 0 ? `
                                     <tr>
-                                        <td colspan="6" class="p-10 text-center text-slate-400 font-medium">
-                                            No branch orders with an Order ID were submitted for <strong>${escapeHtml(matrixFilterDate || 'this date')}</strong>.
-                                        </td>
-                                    </tr>
-                                ` : displayedItems.length === 0 ? `
-                                    <tr>
-                                        <td colspan="${5 + activeBranches.length}" class="p-8 text-center text-slate-400">
-                                            No items found for the selected category.
+                                        <td colspan="${6 + activeBranches.length}" class="p-10 text-center text-slate-400 font-medium">
+                                            No checked/submitted active items found for <strong>${escapeHtml(matrixFilterDate || 'this date')}</strong>.
                                         </td>
                                     </tr>
                                 ` : displayedItems.map((it, idx) => {
@@ -1310,11 +1448,14 @@
             if (matchingOrders.length > 0) {
                 const primaryOrder = matchingOrders[0];
                 if (!primaryOrder.quantities) primaryOrder.quantities = {};
+                if (!Array.isArray(primaryOrder.selectedItemIds)) primaryOrder.selectedItemIds = [];
 
                 if (newQty > 0) {
                     primaryOrder.quantities[itemId] = newQty;
+                    if (!primaryOrder.selectedItemIds.includes(itemId)) primaryOrder.selectedItemIds.push(itemId);
                 } else {
                     delete primaryOrder.quantities[itemId];
+                    primaryOrder.selectedItemIds = primaryOrder.selectedItemIds.filter(id => id !== itemId);
                 }
                 primaryOrder.updatedAt = new Date().toISOString();
                 await dbSaveRecord('orders', primaryOrder);
@@ -1336,6 +1477,7 @@
                     deliveryDate: targetDate,
                     status: 'Submitted',
                     quantities: { [itemId]: newQty },
+                    selectedItemIds: [itemId],
                     updatedAt: new Date().toISOString()
                 };
                 await dbSaveRecord('orders', newOrder);
@@ -1360,7 +1502,7 @@
             const orderIdsText = branchOrders.map(o => o.id).filter(Boolean).join(', ') || 'N/A';
 
             let rowIndex = 0;
-            const rowsHtml = state.items.map(it => {
+            const rowsHtml = state.items.filter(isItemActive).map(it => {
                 const totalQty = branchOrders.reduce((sum, ord) => sum + (Number(ord?.quantities?.[it.id]) || 0), 0);
                 if (totalQty === 0) return '';
                 rowIndex++;
@@ -1425,7 +1567,6 @@
             const s = state.settings || DEFAULT_SETTINGS;
             const dateOrders = getSubmittedDateOrders(challanDate, null);
 
-            // Only generate challan layouts for explicitly selected branches; keep screen clear otherwise
             const branchesToRender = state.branches.filter(b => challanSelectedBranchIds.includes(b.id));
 
             container.innerHTML = `
@@ -1534,6 +1675,7 @@
 
         // ==================== 5. CATEGORIES & ITEM MASTER ====================
         let itemMasterFilterCatId = '';
+        let itemMasterStatusFilter = 'ALL';
         let importCompletedForCategory = false;
 
         function renderMasterItemsView(container) {
@@ -1547,15 +1689,20 @@
                 importCompletedForCategory = false;
             }
 
-            const filteredItems = itemMasterFilterCatId 
-                ? state.items.filter(i => i.categoryId === itemMasterFilterCatId)
+            const filteredItems = itemMasterFilterCatId
+                ? state.items.filter(i => {
+                    if (i.categoryId !== itemMasterFilterCatId) return false;
+                    const st = i.status || 'Active';
+                    if (itemMasterStatusFilter !== 'ALL' && st !== itemMasterStatusFilter) return false;
+                    return true;
+                })
                 : [];
 
             const currentCat = state.categories.find(c => c.id === itemMasterFilterCatId);
             const currentCatName = currentCat ? currentCat.name : 'No Category Selected';
 
             container.innerHTML = `
-                <div class="max-w-5xl mx-auto space-y-6">
+                <div class="max-w-6xl mx-auto space-y-6">
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div>
@@ -1592,14 +1739,19 @@
 
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b">
-                            <div class="flex items-center gap-3">
+                            <div class="flex flex-wrap items-center gap-3">
                                 <div>
                                     <h3 class="font-bold text-lg">Item Master Management</h3>
-                                    <p class="text-xs text-slate-500">View and manage items strictly per category</p>
+                                    <p class="text-xs text-slate-500">Manage item status (Active/Inactive), multi-unit conversions, and items</p>
                                 </div>
                                 <select id="filter-cat-select" onchange="onCategoryDropdownChange(this.value)" class="px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold text-blue-700">
                                     ${state.categories.length === 0 ? `<option value="">No Categories Available</option>` : ''}
                                     ${state.categories.map(c => `<option value="${c.id}" ${c.id === itemMasterFilterCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+                                </select>
+                                <select id="filter-status-select" onchange="onItemStatusFilterChange(this.value)" class="px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold text-slate-800">
+                                    <option value="ALL" ${itemMasterStatusFilter === 'ALL' ? 'selected' : ''}>Status: All</option>
+                                    <option value="Active" ${itemMasterStatusFilter === 'Active' ? 'selected' : ''}>Status: Active</option>
+                                    <option value="Inactive" ${itemMasterStatusFilter === 'Inactive' ? 'selected' : ''}>Status: Inactive</option>
                                 </select>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
@@ -1622,48 +1774,55 @@
 
                         <div class="flex items-center justify-between bg-blue-50/70 p-3 rounded-xl border border-blue-100 text-xs">
                             <span class="font-bold text-blue-900 flex items-center gap-1.5">
-                                <i data-lucide="info" class="w-4 h-4 text-blue-600"></i> Active Category & Import Target: <span class="text-blue-700 font-extrabold text-sm underline">${escapeHtml(currentCatName)}</span>
+                                <i data-lucide="info" class="w-4 h-4 text-blue-600"></i> Active Category &amp; Import Target: <span class="text-blue-700 font-extrabold text-sm underline">${escapeHtml(currentCatName)}</span>
                             </span>
-                            <span class="text-slate-500 font-medium">${importCompletedForCategory ? 'Import locked for this category. Click "Refresh" to choose another category.' : 'Ready to import items exclusively into this category.'}</span>
+                            <span class="text-slate-500 font-medium">${importCompletedForCategory ? 'Import locked for this category. Click "Refresh" to choose another category.' : 'Inactive items are hidden from Order Form & Consolidated Matrix.'}</span>
                         </div>
 
-                        <table class="w-full text-left text-sm border">
-                            <thead>
-                                <tr class="bg-slate-100 font-bold text-xs">
-                                    <th class="p-3 border text-center w-10">
-                                        <input type="checkbox" id="select-all-items" onchange="toggleSelectAll('item-checkbox', this.checked)" class="rounded text-blue-600 w-4 h-4">
-                                    </th>
-                                    <th class="p-3 border w-12">Sr</th>
-                                    <th class="p-3 border">Code</th>
-                                    <th class="p-3 border">Item Name</th>
-                                    <th class="p-3 border">Unit</th>
-                                    <th class="p-3 border">Category</th>
-                                    <th class="p-3 border text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${filteredItems.length === 0 ? `<tr><td colspan="7" class="p-8 text-center text-slate-400 font-medium">No items found in <strong>${escapeHtml(currentCatName)}</strong>. Choose another category or import items.</td></tr>` :
-                                    filteredItems.map((it, idx) => {
-                                        const cat = state.categories.find(c => c.id === it.categoryId);
-                                        return `
-                                            <tr>
-                                                <td class="p-3 border text-center">
-                                                    <input type="checkbox" value="${it.id}" class="item-checkbox rounded text-blue-600 w-4 h-4">
-                                                </td>
-                                                <td class="p-3 border text-slate-500 font-mono">${idx + 1}</td>
-                                                <td class="p-3 border font-mono font-bold">${escapeHtml(it.code)}</td>
-                                                <td class="p-3 border font-semibold">${escapeHtml(it.name)}</td>
-                                                <td class="p-3 border">${escapeHtml(it.unit)}</td>
-                                                <td class="p-3 border font-medium text-blue-700">${cat ? escapeHtml(cat.name) : '<span class="text-rose-500 font-bold">Unassigned</span>'}</td>
-                                                <td class="p-3 border text-right space-x-2">
-                                                    <button onclick="openItemModal('${it.id}')" class="text-blue-600 font-bold">Edit</button>
-                                                    <button onclick="deleteRecord('items', '${it.id}')" class="text-rose-600 font-bold">Delete</button>
-                                                </td>
-                                            </tr>
-                                        `;
-                                    }).join('')}
-                            </tbody>
-                        </table>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm border">
+                                <thead>
+                                    <tr class="bg-slate-100 font-bold text-xs">
+                                        <th class="p-3 border text-center w-10">
+                                            <input type="checkbox" id="select-all-items" onchange="toggleSelectAll('item-checkbox', this.checked)" class="rounded text-blue-600 w-4 h-4">
+                                        </th>
+                                        <th class="p-3 border w-12">Sr</th>
+                                        <th class="p-3 border">Code</th>
+                                        <th class="p-3 border">Item Name</th>
+                                        <th class="p-3 border">Unit</th>
+                                        <th class="p-3 border">Multi-Unit Conversion</th>
+                                        <th class="p-3 border text-center">Status</th>
+                                        <th class="p-3 border text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${filteredItems.length === 0 ? `<tr><td colspan="8" class="p-8 text-center text-slate-400 font-medium">No items found matching the selected category/status in <strong>${escapeHtml(currentCatName)}</strong>.</td></tr>` :
+                                        filteredItems.map((it, idx) => {
+                                            const st = it.status || 'Active';
+                                            const convText = formatUnitConversion(it);
+                                            return `
+                                                <tr>
+                                                    <td class="p-3 border text-center">
+                                                        <input type="checkbox" value="${it.id}" class="item-checkbox rounded text-blue-600 w-4 h-4">
+                                                    </td>
+                                                    <td class="p-3 border text-slate-500 font-mono">${idx + 1}</td>
+                                                    <td class="p-3 border font-mono font-bold">${escapeHtml(it.code)}</td>
+                                                    <td class="p-3 border font-semibold">${escapeHtml(it.name)}</td>
+                                                    <td class="p-3 border"><span class="px-2 py-0.5 bg-slate-100 rounded text-xs font-bold">${escapeHtml(it.unit)}</span></td>
+                                                    <td class="p-3 border text-xs font-semibold text-indigo-700">${escapeHtml(convText)}</td>
+                                                    <td class="p-3 border text-center">
+                                                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${st === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}">${escapeHtml(st)}</span>
+                                                    </td>
+                                                    <td class="p-3 border text-right space-x-2 whitespace-nowrap">
+                                                        <button onclick="openItemModal('${it.id}')" class="text-blue-600 font-bold">Edit</button>
+                                                        <button onclick="deleteRecord('items', '${it.id}')" class="text-rose-600 font-bold">Delete</button>
+                                                    </td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             `;
@@ -1677,8 +1836,14 @@
             showToast(`Switched to category: ${selectedCat ? selectedCat.name : ''}. Import unlocked.`, 'info');
         };
 
+        window.onItemStatusFilterChange = function(newStatus) {
+            itemMasterStatusFilter = newStatus;
+            renderMasterItemsView(document.getElementById('main-content'));
+        };
+
         window.refreshItemMasterView = function() {
             importCompletedForCategory = false;
+            itemMasterStatusFilter = 'ALL';
             if (state.categories.length > 0) {
                 itemMasterFilterCatId = state.categories[0].id;
             }
@@ -1738,36 +1903,75 @@
             if (state.categories.length === 0) {
                 return showToast('Please create at least one category before adding items!', 'error');
             }
-            const item = id ? state.items.find(i => i.id === id) : { id: 'ITM-' + Date.now(), code: '', name: '', unit: 'PCS', categoryId: itemMasterFilterCatId || state.categories[0].id };
+            const item = id
+                ? { status: 'Active', conversionDirection: 'down', conversionFactor: 1, altUnit: '', ...state.items.find(i => i.id === id) }
+                : { id: 'ITM-' + Date.now(), code: '', name: '', unit: 'BOX', altUnit: '', conversionFactor: 1, conversionDirection: 'down', status: 'Active', categoryId: itemMasterFilterCatId || state.categories[0].id };
+
             openModal({
                 title: id ? 'Edit Item' : 'Add Item',
                 bodyHtml: `
                     <div class="space-y-3">
-                        <div>
-                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Item Code</label>
-                            <input type="text" id="m-item-code" value="${escapeHtml(item.code)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Item Code</label>
+                                <input type="text" id="m-item-code" value="${escapeHtml(item.code)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Item Status</label>
+                                <select id="m-item-status" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                                    <option value="Active" ${(item.status || 'Active') === 'Active' ? 'selected' : ''}>Active</option>
+                                    <option value="Inactive" ${item.status === 'Inactive' ? 'selected' : ''}>Inactive</option>
+                                </select>
+                            </div>
                         </div>
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Item Name</label>
                             <input type="text" id="m-item-name" value="${escapeHtml(item.name)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
                         </div>
-                        <div>
-                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Unit (e.g. BOX, MEAL, PCS, KG)</label>
-                            <input type="text" id="m-item-unit" value="${escapeHtml(item.unit)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Primary Unit (e.g. BOX, PCS)</label>
+                                <input type="text" id="m-item-unit" value="${escapeHtml(item.unit)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Category</label>
+                                <select id="m-item-cat" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                                    ${state.categories.map(c => `<option value="${c.id}" ${c.id === item.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+                                </select>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Category</label>
-                            <select id="m-item-cat" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
-                                ${state.categories.map(c => `<option value="${c.id}" ${c.id === item.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
-                            </select>
+                        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                            <div class="text-xs font-extrabold uppercase text-indigo-700">Multi-Unit Conversion Rule (Optional)</div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div>
+                                    <label class="block text-[11px] font-bold text-slate-500 mb-1">Secondary Unit</label>
+                                    <input type="text" id="m-item-alt-unit" value="${escapeHtml(item.altUnit || '')}" placeholder="e.g. MEAL / PCS" class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-slate-500 mb-1">Factor</label>
+                                    <input type="number" min="0" step="any" id="m-item-conv-factor" value="${escapeHtml(item.conversionFactor ?? 1)}" class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-slate-500 mb-1">Direction</label>
+                                    <select id="m-item-conv-dir" class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                                        <option value="down" ${(item.conversionDirection || 'down') === 'down' ? 'selected' : ''}>1 Unit → N Sub-Units</option>
+                                        <option value="up" ${item.conversionDirection === 'up' ? 'selected' : ''}>N Units → 1 Big Unit</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `,
                 onConfirm: async () => {
                     item.code = document.getElementById('m-item-code').value.trim();
+                    item.status = document.getElementById('m-item-status').value;
                     item.name = document.getElementById('m-item-name').value.trim();
                     item.unit = document.getElementById('m-item-unit').value.trim().toUpperCase();
                     item.categoryId = document.getElementById('m-item-cat').value;
+                    item.altUnit = document.getElementById('m-item-alt-unit').value.trim().toUpperCase();
+                    item.conversionFactor = Math.max(0, parseFloat(document.getElementById('m-item-conv-factor').value) || 1);
+                    item.conversionDirection = document.getElementById('m-item-conv-dir').value;
+
                     if (!item.name || !item.code) return showToast('Code and Name are required!', 'error');
                     await dbSaveRecord('items', item);
                     closeModal();
@@ -1972,75 +2176,145 @@
             });
         };
 
-        // ==================== 7. USER MANAGEMENT & PERMISSIONS ====================
+        // ==================== 7. USER MANAGEMENT & DYNAMIC ROLE PERMISSIONS ====================
         function renderMasterUsersView(container) {
+            const totalScreens = getAllScreenIds().length;
+
             container.innerHTML = `
-                <div class="max-w-5xl mx-auto bg-white rounded-2xl p-6 shadow-sm border space-y-4">
-                    <div class="flex items-center justify-between">
+                <div class="max-w-6xl mx-auto bg-white rounded-2xl p-6 shadow-sm border space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                            <h3 class="font-bold text-lg">User Accounts & Role Permissions</h3>
-                            <p class="text-xs text-slate-500">Passwords are encrypted with SHA-256 before saving to Firestore</p>
+                            <h3 class="font-bold text-lg">User Accounts &amp; Dynamic Menu Role Permissions</h3>
+                            <p class="text-xs text-slate-500">Automatically detects all ${SYSTEM_MENU_REGISTRY.length} menus and ${totalScreens} submenus so new screens appear here automatically.</p>
                         </div>
                         <button onclick="openUserModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5">
                             <i data-lucide="user-plus" class="w-4 h-4"></i> Add New User
                         </button>
                     </div>
-                    <table class="w-full text-left text-sm border">
-                        <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">Username</th><th class="p-3 border">Full Name</th><th class="p-3 border">Role / Permission</th><th class="p-3 border">Assigned Branch / Dest</th><th class="p-3 border text-right">Actions</th></tr></thead>
-                        <tbody>
-                            ${state.users.map(u => {
-                                const br = state.branches.find(b => b.id === u.branchId);
-                                const dst = state.destinations.find(d => d.id === u.destinationId);
-                                const assigned = br ? `Branch: ${br.name}` : (dst ? `Dest: ${dst.name}` : 'All / Global');
-                                return `
-                                    <tr>
-                                        <td class="p-3 border font-mono font-bold">${escapeHtml(u.username)}</td>
-                                        <td class="p-3 border font-semibold">${escapeHtml(u.fullName)}</td>
-                                        <td class="p-3 border"><span class="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold text-xs rounded">${escapeHtml(u.role)}</span></td>
-                                        <td class="p-3 border text-xs text-slate-600">${escapeHtml(assigned)}</td>
-                                        <td class="p-3 border text-right space-x-2">
-                                            <button onclick="openUserModal('${u.id}')" class="text-blue-600 font-bold">Edit</button>
-                                            ${u.username !== 'admin' ? `<button onclick="deleteRecord('users', '${u.id}')" class="text-rose-600 font-bold">Delete</button>` : ''}
-                                        </td>
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm border">
+                            <thead>
+                                <tr class="bg-slate-100 font-bold text-xs">
+                                    <th class="p-3 border">Username</th>
+                                    <th class="p-3 border">Full Name</th>
+                                    <th class="p-3 border">Role</th>
+                                    <th class="p-3 border">Assigned Branch / Dest</th>
+                                    <th class="p-3 border">Allowed Submenus</th>
+                                    <th class="p-3 border text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${state.users.map(u => {
+                                    const br = state.branches.find(b => b.id === u.branchId);
+                                    const dst = state.destinations.find(d => d.id === u.destinationId);
+                                    const assigned = br ? `Branch: ${br.name}` : (dst ? `Dest: ${dst.name}` : 'All / Global');
+                                    const perms = resolveUserPermissions(u);
+                                    const allowedCount = Object.values(perms).filter(Boolean).length;
+
+                                    return `
+                                        <tr>
+                                            <td class="p-3 border font-mono font-bold">${escapeHtml(u.username)}</td>
+                                            <td class="p-3 border font-semibold">${escapeHtml(u.fullName)}</td>
+                                            <td class="p-3 border"><span class="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold text-xs rounded">${escapeHtml(u.role)}</span></td>
+                                            <td class="p-3 border text-xs text-slate-600">${escapeHtml(assigned)}</td>
+                                            <td class="p-3 border"><span class="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs font-bold">${allowedCount} / ${totalScreens} screens</span></td>
+                                            <td class="p-3 border text-right space-x-2 whitespace-nowrap">
+                                                <button onclick="openUserModal('${u.id}')" class="text-blue-600 font-bold">Edit</button>
+                                                ${u.username !== 'admin' ? `<button onclick="deleteRecord('users', '${u.id}')" class="text-rose-600 font-bold">Delete</button>` : ''}
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             `;
         }
 
+        function renderPermissionMatrixHtml(userObj) {
+            const perms = resolveUserPermissions(userObj);
+            return SYSTEM_MENU_REGISTRY.map(group => {
+                const allGroupChecked = group.children.every(c => Boolean(perms[c.id]));
+                return `
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                        <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                            <span class="text-xs font-extrabold uppercase text-slate-800">${escapeHtml(group.label)}</span>
+                            <label class="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 cursor-pointer">
+                                <input type="checkbox" ${allGroupChecked ? 'checked' : ''} onchange="togglePermissionGroup('${group.id}', this.checked)" class="rounded text-indigo-600 w-3.5 h-3.5">
+                                <span>All in Menu</span>
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            ${group.children.map(sub => `
+                                <label class="flex items-center gap-2 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 cursor-pointer">
+                                    <input type="checkbox" data-perm-screen="${sub.id}" data-perm-group="${group.id}" ${perms[sub.id] ? 'checked' : ''} class="rounded text-blue-600 w-3.5 h-3.5">
+                                    <span class="truncate">${escapeHtml(sub.label)}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        window.togglePermissionGroup = function(groupId, checked) {
+            document.querySelectorAll(`input[data-perm-group="${groupId}"]`).forEach(cb => {
+                cb.checked = checked;
+            });
+        };
+
+        window.applyRoleDefaultPermissions = function(role) {
+            const defaults = buildDefaultPermissionsForRole(role);
+            document.querySelectorAll('input[data-perm-screen]').forEach(cb => {
+                const screenId = cb.dataset.permScreen;
+                cb.checked = Boolean(defaults[screenId]);
+            });
+        };
+
         window.openUserModal = function(id = null) {
-            const u = id ? state.users.find(x => x.id === id) : { id: 'USR-' + Date.now(), username: '', passwordHash: '', fullName: '', role: 'branch', branchId: '', destinationId: '' };
+            const u = id
+                ? { ...state.users.find(x => x.id === id) }
+                : { id: 'USR-' + Date.now(), username: '', passwordHash: '', fullName: '', role: 'branch', branchId: '', destinationId: '', permissions: buildDefaultPermissionsForRole('branch') };
+
             openModal({
-                title: id ? 'Edit User & Permissions' : 'Add User Account',
+                title: id ? 'Edit User & Menu Permissions' : 'Add User Account',
                 bodyHtml: `
                     <div class="space-y-3">
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Username</label><input type="text" id="m-u-name" value="${escapeHtml(u.username)}" ${u.username === 'admin' ? 'readonly' : ''} class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">${id ? 'New Password (leave blank to keep current)' : 'Password'}</label><input type="password" id="m-u-pass" placeholder="Enter password" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Full Name</label><input type="text" id="m-u-full" value="${escapeHtml(u.fullName)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
-                        <div>
-                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Role / Permission</label>
-                            <select id="m-u-role" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
-                                <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrator (Full Access)</option>
-                                <option value="branch" ${u.role === 'branch' ? 'selected' : ''}>Branch User (Order Submission)</option>
-                                <option value="factory_warehouse" ${u.role === 'factory_warehouse' ? 'selected' : ''}>Destination User (Factory/Warehouse Matrix & Challan)</option>
-                            </select>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Username</label><input type="text" id="m-u-name" value="${escapeHtml(u.username)}" ${u.username === 'admin' ? 'readonly' : ''} class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                            <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">${id ? 'New Password (optional)' : 'Password'}</label><input type="password" id="m-u-pass" placeholder="Enter password" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Restrict to Specific Branch (Optional)</label>
-                            <select id="m-u-branch" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
-                                <option value="">-- Any Branch --</option>
-                                ${state.branches.map(b => `<option value="${b.id}" ${b.id === u.branchId ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
-                            </select>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Full Name</label><input type="text" id="m-u-full" value="${escapeHtml(u.fullName)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Base Role Preset</label>
+                                <select id="m-u-role" onchange="applyRoleDefaultPermissions(this.value)" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                                    <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrator (Full Access)</option>
+                                    <option value="branch" ${u.role === 'branch' ? 'selected' : ''}>Branch User (Order Submission)</option>
+                                    <option value="factory_warehouse" ${u.role === 'factory_warehouse' ? 'selected' : ''}>Destination User (Matrix &amp; Challan)</option>
+                                </select>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Restrict to Specific Destination (Optional)</label>
-                            <select id="m-u-dest" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
-                                <option value="">-- All Destinations --</option>
-                                ${state.destinations.map(d => `<option value="${d.id}" ${d.id === u.destinationId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
-                            </select>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Restrict Branch (Optional)</label>
+                                <select id="m-u-branch" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                                    <option value="">-- Any Branch --</option>
+                                    ${state.branches.map(b => `<option value="${b.id}" ${b.id === u.branchId ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Restrict Destination (Optional)</label>
+                                <select id="m-u-dest" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                                    <option value="">-- All Destinations --</option>
+                                    ${state.destinations.map(d => `<option value="${d.id}" ${d.id === u.destinationId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="space-y-2 pt-1">
+                            <label class="block text-xs font-bold uppercase text-slate-500">Menu &amp; Submenu Permissions (Auto-Synced)</label>
+                            ${renderPermissionMatrixHtml(u)}
                         </div>
                     </div>
                 `,
@@ -2049,6 +2323,11 @@
                     const rawPass = document.getElementById('m-u-pass').value;
                     if (!newUsername) return showToast('Username is required!', 'error');
                     if (!id && !rawPass) return showToast('Password is required for new users!', 'error');
+
+                    const collectedPerms = {};
+                    document.querySelectorAll('input[data-perm-screen]').forEach(cb => {
+                        collectedPerms[cb.dataset.permScreen] = cb.checked;
+                    });
 
                     u.username = newUsername;
                     if (rawPass) {
@@ -2059,11 +2338,19 @@
                     u.role = document.getElementById('m-u-role').value;
                     u.branchId = document.getElementById('m-u-branch').value;
                     u.destinationId = document.getElementById('m-u-dest').value;
+                    u.permissions = collectedPerms;
 
                     await dbSaveRecord('users', u);
+
+                    if (currentUser && currentUser.id === u.id) {
+                        currentUser = { ...u };
+                        sessionStorage.setItem('kty_active_user', JSON.stringify(currentUser));
+                        renderSidebarMenu();
+                    }
+
                     closeModal();
                     renderCurrentRoute();
-                    showToast('User saved with encrypted credentials!');
+                    showToast('User & menu permissions saved successfully!');
                 }
             });
         };
@@ -2075,7 +2362,7 @@
                 <div class="max-w-3xl mx-auto bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-200 space-y-6">
                     <div class="flex items-center justify-between border-b pb-4">
                         <div>
-                            <h3 class="text-lg font-bold text-slate-900">Company Profile & Software Branding</h3>
+                            <h3 class="text-lg font-bold text-slate-900">Company Profile &amp; Software Branding</h3>
                             <p class="text-xs text-slate-500">Displayed on the Login Screen, Navigation Sidebar, and Delivery Challans</p>
                         </div>
                         <button onclick="saveSystemSettings()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md flex items-center gap-2">
@@ -2257,6 +2544,10 @@
                                 code: code || ('ITM-' + (i + 1)),
                                 name: name || code,
                                 unit: unit || 'PCS',
+                                altUnit: '',
+                                conversionFactor: 1,
+                                conversionDirection: 'down',
+                                status: 'Active',
                                 categoryId: itemMasterFilterCatId
                             };
                             await dbSaveRecord('items', rec);
