@@ -199,7 +199,7 @@
                     <p id="page-subtitle" class="text-xs text-slate-500">Manage stock transfer requests and warehouse dispatches</p>
                 </div>
                 <div class="flex items-center gap-2.5 flex-wrap">
-                    <span id="header-access-badge" class="px-2.5 py-1 rounded-full text-[11px] font-bold border"></span>
+                    <span id="header-access-badge" class="hidden"></span>
                     <span id="header-branch-pill" class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-bold flex items-center gap-1.5">
                         <i data-lucide="shield" class="w-3.5 h-3.5"></i>
                         <span id="header-role-label">Authenticated</span>
@@ -353,7 +353,6 @@
             allIds.forEach(id => {
                 const rawEntry = custom[id];
                 if (typeof rawEntry === 'boolean') {
-                    // Backward compatibility if a legacy boolean was saved
                     resolved[id] = { view: rawEntry, edit: rawEntry && roles.includes('admin') };
                 } else if (rawEntry && typeof rawEntry === 'object') {
                     const canView = rawEntry.view !== undefined ? Boolean(rawEntry.view) : Boolean(base[id]?.view);
@@ -387,7 +386,7 @@
 
         function requireEditPermission(screenId, actionLabel = 'modify data') {
             if (!canEditScreen(screenId)) {
-                showToast(`View-Only Access: You do not have Edit/Save permission to ${actionLabel}.`, 'warning');
+                showToast(`Access Denied: You do not have permission to ${actionLabel}.`, 'warning');
                 return false;
             }
             return true;
@@ -415,7 +414,7 @@
             orders: []
         };
 
-        const STORAGE_KEY = 'kty_store_order_secure_v12';
+        const STORAGE_KEY = 'kty_store_order_secure_v13';
         let state = JSON.parse(JSON.stringify(CLEAN_DEFAULT_DATA));
 
         async function ensureDefaultAdmin() {
@@ -657,14 +656,9 @@
 
         function updateHeaderScreenAccessBadge() {
             const badge = document.getElementById('header-access-badge');
-            if (!currentUser || !badge) return;
-            const editable = canEditScreen(currentRoute);
-            if (editable) {
-                badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200';
-                badge.textContent = 'Mode: View & Edit / Save';
-            } else {
-                badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border bg-amber-50 text-amber-700 border-amber-200';
-                badge.textContent = 'Mode: View Only';
+            if (badge) {
+                badge.className = 'hidden';
+                badge.textContent = '';
             }
         }
 
@@ -805,7 +799,6 @@
         function renderSidebarMenu() {
             const nav = document.getElementById('sidebar-nav');
             const groups = getMenuGroups();
-            const perms = resolveUserPermissions(currentUser);
 
             nav.innerHTML = groups.map(group => {
                 const isOpen = expandedGroups[group.id] !== false;
@@ -822,17 +815,11 @@
                         </button>
                         <div class="${isOpen ? 'block' : 'hidden'} px-2 pb-2 pt-1 space-y-1">
                             ${group.children.map(item => {
-                                const hasEdit = Boolean(perms[item.id]?.edit);
                                 const isCurrent = currentRoute === item.id;
                                 return `
-                                    <button onclick="navigateTo('${item.id}')" class="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold transition ${isCurrent ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
-                                        <span class="flex items-center gap-2.5 min-w-0">
-                                            <i data-lucide="${item.icon}" class="w-4 h-4 shrink-0"></i>
-                                            <span class="truncate">${item.label}</span>
-                                        </span>
-                                        <span class="text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${isCurrent ? 'bg-white/20 text-white' : (hasEdit ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300')}">
-                                            ${hasEdit ? 'EDIT' : 'VIEW'}
-                                        </span>
+                                    <button onclick="navigateTo('${item.id}')" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold transition ${isCurrent ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
+                                        <i data-lucide="${item.icon}" class="w-4 h-4 shrink-0"></i>
+                                        <span class="truncate">${item.label}</span>
                                     </button>
                                 `;
                             }).join('')}
@@ -846,7 +833,7 @@
         window.navigateTo = function(routeId) {
             const allowed = getAllowedRoutes().map(r => r.id);
             if (!allowed.includes(routeId)) {
-                return showToast('Access Denied: You do not have View permission for this module.', 'error');
+                return showToast('Access Denied: You do not have permission for this module.', 'error');
             }
             currentRoute = routeId;
             renderSidebarMenu();
@@ -942,13 +929,6 @@
 
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
-                    ${!canEdit ? `
-                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
-                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
-                            <span>You have <strong>View Only</strong> permission on Stock Transfer Order Form. Creating or saving orders is disabled for your account.</span>
-                        </div>
-                    ` : ''}
-
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                         <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-6 border-b border-slate-100">
                             <span class="px-3 py-1 rounded-full text-xs font-bold ${orderFormState.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}">
@@ -1427,13 +1407,6 @@
 
             container.innerHTML = `
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
-                    ${!canEditMatrix ? `
-                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
-                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
-                            <span>You have <strong>View Only</strong> permission on Consolidated Order Matrix. Inline cell editing and executing challans are disabled.</span>
-                        </div>
-                    ` : ''}
-
                     <div class="flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-slate-200">
                         <div class="flex flex-wrap items-end gap-4">
                             <div>
@@ -1466,7 +1439,7 @@
                     <div class="flex items-center justify-between bg-indigo-50/70 border border-indigo-100 px-4 py-2.5 rounded-xl text-xs text-indigo-900">
                         <span class="flex items-center gap-1.5 font-medium">
                             <i data-lucide="mouse-pointer-click" class="w-4 h-4 text-indigo-600 shrink-0"></i>
-                            Showing only checked/submitted active items and branches with orders for <strong>${escapeHtml(matrixFilterDate || 'selected date')}</strong>. ${canEditMatrix ? 'Double-click any branch cell to edit.' : 'View-only mode active.'}
+                            Showing only checked/submitted active items and branches with orders for <strong>${escapeHtml(matrixFilterDate || 'selected date')}</strong>. ${canEditMatrix ? 'Double-click any branch cell to edit.' : ''}
                         </span>
                     </div>
 
@@ -1514,7 +1487,7 @@
                                                 data-branch-id="${b.id}"
                                                 ${canEditMatrix ? `ondblclick="startMatrixCellEdit(this)"` : ''}
                                                 class="py-2.5 px-3 text-center font-bold ${q > 0 ? 'text-slate-900 bg-emerald-50/40' : 'text-slate-400'} ${canEditMatrix ? 'excel-cell-editable' : ''}"
-                                                title="${canEditMatrix ? 'Double-click to edit quantity' : 'View only'}"
+                                                title="${canEditMatrix ? 'Double-click to edit quantity' : ''}"
                                             >${q > 0 ? q : 0}</td>
                                         `;
                                     }).join('');
@@ -1928,13 +1901,6 @@
 
             container.innerHTML = `
                 <div class="max-w-6xl mx-auto space-y-6">
-                    ${!canEdit ? `
-                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
-                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
-                            <span>You have <strong>View Only</strong> permission on Categories &amp; Item Master. Adding, editing, importing, or deleting is disabled.</span>
-                        </div>
-                    ` : ''}
-
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div>
@@ -1963,7 +1929,7 @@
                                                 ${canEdit ? `
                                                     <button onclick="openCategoryModal('${c.id}')" class="text-blue-600 font-bold">Edit</button>
                                                     <button onclick="deleteRecord('categories', '${c.id}')" class="text-rose-600 font-bold">Delete</button>
-                                                ` : `<span class="text-xs text-slate-400 font-semibold">View Only</span>`}
+                                                ` : ''}
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -2051,7 +2017,7 @@
                                                         ${canEdit ? `
                                                             <button onclick="openItemModal('${it.id}')" class="text-blue-600 font-bold">Edit</button>
                                                             <button onclick="deleteRecord('items', '${it.id}')" class="text-rose-600 font-bold">Delete</button>
-                                                        ` : `<span class="text-xs text-slate-400 font-semibold">View Only</span>`}
+                                                        ` : ''}
                                                     </td>
                                                 </tr>
                                             `;
@@ -2228,13 +2194,6 @@
 
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
-                    ${!canEdit ? `
-                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
-                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
-                            <span>You have <strong>View Only</strong> permission on Branches &amp; Destinations. Adding, editing, or deleting is disabled.</span>
-                        </div>
-                    ` : ''}
-
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b">
                             <div>
@@ -2278,7 +2237,7 @@
                                                 ${canEdit ? `
                                                     <button onclick="openBranchModal('${b.id}')" class="text-blue-600 font-bold">Edit</button>
                                                     <button onclick="deleteRecord('branches', '${b.id}')" class="text-rose-600 font-bold">Delete</button>
-                                                ` : `<span class="text-xs text-slate-400 font-semibold">View Only</span>`}
+                                                ` : ''}
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -2329,7 +2288,7 @@
                                                 ${canEdit ? `
                                                     <button onclick="openDestinationModal('${d.id}')" class="text-blue-600 font-bold">Edit</button>
                                                     <button onclick="deleteRecord('destinations', '${d.id}')" class="text-rose-600 font-bold">Delete</button>
-                                                ` : `<span class="text-xs text-slate-400 font-semibold">View Only</span>`}
+                                                ` : ''}
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -2441,13 +2400,6 @@
 
             container.innerHTML = `
                 <div class="max-w-6xl mx-auto bg-white rounded-2xl p-6 shadow-sm border space-y-4">
-                    ${!canEdit ? `
-                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
-                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
-                            <span>You have <strong>View Only</strong> permission on User Accounts &amp; Roles. Creating or modifying user roles/permissions is disabled.</span>
-                        </div>
-                    ` : ''}
-
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <h3 class="font-bold text-lg">User Accounts, Multi-Roles &amp; Document Permissions</h3>
@@ -2497,7 +2449,7 @@
                                                 ${canEdit ? `
                                                     <button onclick="openUserModal('${u.id}')" class="text-blue-600 font-bold">Edit</button>
                                                     ${u.username !== 'admin' ? `<button onclick="deleteRecord('users', '${u.id}')" class="text-rose-600 font-bold">Delete</button>` : ''}
-                                                ` : `<span class="text-xs text-slate-400 font-semibold">View Only</span>`}
+                                                ` : ''}
                                             </td>
                                         </tr>
                                     `;
@@ -2728,13 +2680,6 @@
 
             container.innerHTML = `
                 <div class="max-w-3xl mx-auto bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-200 space-y-6">
-                    ${!canEdit ? `
-                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
-                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
-                            <span>You have <strong>View Only</strong> permission on Company &amp; System Information. Saving changes is disabled.</span>
-                        </div>
-                    ` : ''}
-
                     <div class="flex items-center justify-between border-b pb-4">
                         <div>
                             <h3 class="text-lg font-bold text-slate-900">Company Profile &amp; Software Branding</h3>
