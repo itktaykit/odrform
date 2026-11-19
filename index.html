@@ -14,6 +14,8 @@
     <!-- jsPDF & AutoTable for PDF Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <!-- Chart.js for Production Analytics & Charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -1987,6 +1989,19 @@
         let prodSheetSelectedDate = TODAY;
         let prodSheetCatId = 'ALL';
         let prodSheetSearch = '';
+        let prodSheetChartInstance = null;
+        let prodTopItemsChartInstance = null;
+
+        function destroyProductionCharts() {
+            if (prodSheetChartInstance) {
+                try { prodSheetChartInstance.destroy(); } catch (e) {}
+                prodSheetChartInstance = null;
+            }
+            if (prodTopItemsChartInstance) {
+                try { prodTopItemsChartInstance.destroy(); } catch (e) {}
+                prodTopItemsChartInstance = null;
+            }
+        }
 
         function getDaysInYearMonth(ymStr) {
             const parts = String(ymStr || TODAY.slice(0, 7)).split('-');
@@ -2034,10 +2049,110 @@
             await dbSaveRecord('productions', record);
         }
 
-        function recalculateProductionSheetDom(daysInMonth, visibleItems) {
+        function renderProductionSheetCharts(ym, daysInMonth, visibleItems, daySums) {
+            destroyProductionCharts();
+            if (!window.Chart) return;
+
+            const dailyCanvas = document.getElementById('prod-daily-trend-chart');
+            const topCanvas = document.getElementById('prod-top-items-chart');
+
+            const [yStr, mStr] = ym.split('-');
+            const shortMonth = MONTH_NAMES[(parseInt(mStr, 10) || 1) - 1]?.slice(0, 3) || ym;
+            const labels = Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`);
+            const series = labels.map((_, i) => daySums[i + 1] || 0);
+
+            if (dailyCanvas) {
+                prodSheetChartInstance = new Chart(dailyCanvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [
+                            {
+                                type: 'bar',
+                                label: `Daily Output (${shortMonth})`,
+                                data: series,
+                                backgroundColor: 'rgba(16, 185, 129, 0.75)',
+                                borderColor: 'rgb(5, 150, 105)',
+                                borderWidth: 1,
+                                borderRadius: 5,
+                                order: 2
+                            },
+                            {
+                                type: 'line',
+                                label: 'Trend Line',
+                                data: series,
+                                borderColor: 'rgb(79, 70, 229)',
+                                backgroundColor: 'rgba(79, 70, 229, 0.12)',
+                                borderWidth: 2.2,
+                                tension: 0.3,
+                                pointRadius: 2.5,
+                                pointBackgroundColor: 'rgb(79, 70, 229)',
+                                fill: false,
+                                order: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11, weight: '600' } } }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                            y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } }
+                        }
+                    }
+                });
+            }
+
+            if (topCanvas) {
+                const ranked = visibleItems.map(it => {
+                    let sum = 0;
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const cell = document.querySelector(`td.prod-day-cell[data-item-id="${it.id}"][data-day="${d}"]`);
+                        sum += cell ? (parseFloat(cell.dataset.val ?? cell.textContent.replace(/,/g, '')) || 0) : 0;
+                    }
+                    return { name: it.name, code: it.code, total: sum };
+                }).sort((a, b) => b.total - a.total).slice(0, 6);
+
+                prodTopItemsChartInstance = new Chart(topCanvas.getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ranked.length > 0 ? ranked.map(r => r.name) : ['No Production'],
+                        datasets: [{
+                            data: ranked.length > 0 ? ranked.map(r => r.total) : [1],
+                            backgroundColor: [
+                                '#059669',
+                                '#4f46e5',
+                                '#d97706',
+                                '#0284c7',
+                                '#7c3aed',
+                                '#db2777'
+                            ],
+                            borderWidth: 2,
+                            borderColor: '#ffffff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '62%',
+                        plugins: {
+                            legend: { position: 'right', labels: { boxWidth: 11, font: { size: 10, weight: '600' } } }
+                        }
+                    }
+                });
+            }
+        }
+
+        function recalculateProductionSheetDom(daysInMonth, visibleItems, ym = prodSheetYearMonth) {
             const daySums = {};
             for (let d = 1; d <= daysInMonth; d++) daySums[d] = 0;
             let overallTotal = 0;
+            let activeDaysCount = 0;
+            let topItemSummary = { name: '-', total: 0 };
 
             visibleItems.forEach(it => {
                 let rowSum = 0;
@@ -2047,6 +2162,9 @@
                     rowSum += val;
                     daySums[d] += val;
                 }
+                if (rowSum > topItemSummary.total) {
+                    topItemSummary = { name: it.name, total: rowSum };
+                }
                 overallTotal += rowSum;
                 const rowAvg = daysInMonth > 0 ? rowSum / daysInMonth : 0;
 
@@ -2055,6 +2173,10 @@
                 if (totalEl) totalEl.textContent = formatNum(rowSum, 0);
                 if (avgEl) avgEl.textContent = formatNum(rowAvg, 1);
             });
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                if (daySums[d] > 0) activeDaysCount++;
+            }
 
             const itemCount = visibleItems.length || 1;
             for (let d = 1; d <= daysInMonth; d++) {
@@ -2066,10 +2188,19 @@
 
             const grandTotalEl = document.getElementById('prod-grand-total');
             const grandDailyAvgEl = document.getElementById('prod-grand-daily-avg');
+            const activeDaysEl = document.getElementById('prod-active-days-kpi');
+            const topItemNameEl = document.getElementById('prod-top-item-name');
+            const topItemValEl = document.getElementById('prod-top-item-val');
             const footGrandAvgEl = document.getElementById('prod-foot-grand-avg');
+
             if (grandTotalEl) grandTotalEl.textContent = formatNum(overallTotal, 0);
             if (grandDailyAvgEl) grandDailyAvgEl.textContent = formatNum(daysInMonth > 0 ? overallTotal / daysInMonth : 0, 1);
+            if (activeDaysEl) activeDaysEl.textContent = `${activeDaysCount} / ${daysInMonth} Days`;
+            if (topItemNameEl) topItemNameEl.textContent = topItemSummary.total > 0 ? topItemSummary.name : 'No Output Yet';
+            if (topItemValEl) topItemValEl.textContent = `${formatNum(topItemSummary.total, 0)} units`;
             if (footGrandAvgEl) footGrandAvgEl.textContent = formatNum(daysInMonth > 0 ? overallTotal / daysInMonth : 0, 1);
+
+            renderProductionSheetCharts(ym, daysInMonth, visibleItems, daySums);
         }
 
         function renderProductionSheetView(container) {
@@ -2099,6 +2230,7 @@
             const dayColTotals = {};
             dayColumns.forEach(d => dayColTotals[d] = 0);
             let grandMonthTotal = 0;
+            let topItem = { name: 'No Output Yet', total: 0 };
 
             const rowsHtml = visibleItems.map((it, rIdx) => {
                 const rec = getProductionRecord(ym, it.id);
@@ -2119,12 +2251,15 @@
                             data-day="${d}"
                             data-val="${val}"
                             ${canEdit ? `ondblclick="startProductionCellEdit(this, '${ym}', ${daysInMonth})"` : ''}
-                            class="prod-day-cell py-2 px-2 text-center font-semibold text-xs ${isHighlightedDay ? 'ring-2 ring-inset ring-blue-500 bg-blue-50/70 text-slate-900' : (val > 0 ? 'text-slate-900 bg-emerald-50/50' : 'text-slate-400')} ${canEdit ? 'excel-cell-editable' : ''}"
+                            class="prod-day-cell py-2 px-2 text-center font-semibold text-xs ${isHighlightedDay ? 'ring-2 ring-inset ring-blue-500 bg-blue-50/80 text-slate-900' : (val > 0 ? 'text-slate-900 bg-emerald-50/50' : 'text-slate-400')} ${canEdit ? 'excel-cell-editable' : ''}"
                             title="${canEdit ? `Day ${d} (${escapeHtml(it.name)}) — Double-click to edit` : ''}"
                         >${val > 0 ? formatNum(val, 0) : 0}</td>
                     `;
                 }).join('');
 
+                if (rowSum > topItem.total) {
+                    topItem = { name: it.name, total: rowSum };
+                }
                 grandMonthTotal += rowSum;
                 const rowAvg = daysInMonth > 0 ? rowSum / daysInMonth : 0;
 
@@ -2140,119 +2275,200 @@
                 `;
             }).join('');
 
+            const activeDaysCount = dayColumns.filter(d => dayColTotals[d] > 0).length;
             const grandDailyAvg = daysInMonth > 0 ? grandMonthTotal / daysInMonth : 0;
 
             container.innerHTML = `
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
-                    <div class="flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-slate-200">
-                        <div class="flex flex-wrap items-end gap-3">
-                            <div>
-                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Production Month</label>
-                                <input type="month" id="prod-sheet-month" value="${ym}" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-600 outline-none">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden space-y-5">
+                    <div class="bg-gradient-to-r from-slate-900 via-emerald-950 to-indigo-950 text-white px-6 py-5 flex flex-wrap items-center justify-between gap-4">
+                        <div class="flex items-center gap-3.5">
+                            <div class="w-11 h-11 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300 shrink-0">
+                                <i data-lucide="factory" class="w-6 h-6"></i>
                             </div>
                             <div>
-                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Date Calendar</label>
-                                <input type="date" id="prod-sheet-date" value="${escapeHtml(prodSheetSelectedDate)}" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-600 outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Category</label>
-                                <select id="prod-sheet-cat" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-emerald-600 outline-none">
-                                    <option value="ALL">-- All Categories --</option>
-                                    ${state.categories.map(c => `<option value="${c.id}" ${c.id === prodSheetCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Search Item</label>
-                                <input type="text" id="prod-sheet-search" value="${escapeHtml(prodSheetSearch)}" placeholder="Code or name..." class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-800 focus:ring-2 focus:ring-emerald-600 outline-none">
+                                <div class="text-[11px] font-extrabold uppercase tracking-wider text-emerald-300">One-Page Production Ledger</div>
+                                <h3 class="text-lg font-extrabold tracking-tight">Daily Production Sheet — ${escapeHtml(monthLabel)}</h3>
                             </div>
                         </div>
 
                         <div class="flex flex-wrap items-center gap-2">
-                            <label class="px-3.5 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-900 text-white cursor-pointer shadow-sm'} font-semibold rounded-xl text-xs flex items-center gap-1.5 transition">
+                            <label class="px-3.5 py-2 ${!canEdit ? 'bg-slate-700/60 text-slate-400 cursor-not-allowed' : 'bg-white/10 hover:bg-white/20 text-white border border-white/15 cursor-pointer'} font-semibold rounded-xl text-xs flex items-center gap-1.5 transition">
                                 <i data-lucide="upload" class="w-4 h-4"></i> Import Excel
                                 <input type="file" accept=".xlsx, .xls, .csv" ${!canEdit ? 'disabled' : ''} class="hidden" onchange="importProductionExcel(event)">
                             </label>
-                            <button onclick="exportProductionSheetExcel()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
+                            <button onclick="exportProductionSheetExcel()" class="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
                                 <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export Excel
                             </button>
-                            <button onclick="exportProductionSheetPdf()" class="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
+                            <button onclick="exportProductionSheetPdf()" class="px-3.5 py-2 bg-rose-500 hover:bg-rose-400 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
                                 <i data-lucide="file-text" class="w-4 h-4"></i> Export PDF
                             </button>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between">
-                            <div>
-                                <div class="text-[11px] font-bold uppercase text-emerald-700">End-of-Month Total (${escapeHtml(monthLabel)})</div>
-                                <div id="prod-grand-total" class="text-xl font-black text-emerald-950 mt-0.5">${formatNum(grandMonthTotal, 0)}</div>
+                    <div class="px-5 space-y-5 pb-5">
+                        <div class="flex flex-wrap items-end justify-between gap-3 bg-slate-50 border border-slate-200 p-4 rounded-2xl">
+                            <div class="flex flex-wrap items-end gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Production Month</label>
+                                    <input type="month" id="prod-sheet-month" value="${ym}" class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-600 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Date Calendar</label>
+                                    <input type="date" id="prod-sheet-date" value="${escapeHtml(prodSheetSelectedDate)}" class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-600 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Category</label>
+                                    <select id="prod-sheet-cat" class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-600 outline-none">
+                                        <option value="ALL">-- All Categories --</option>
+                                        ${state.categories.map(c => `<option value="${c.id}" ${c.id === prodSheetCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+                                    </select>
+                                </div>
                             </div>
-                            <i data-lucide="Sigma" class="w-6 h-6 text-emerald-600"></i>
-                        </div>
-                        <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between">
-                            <div>
-                                <div class="text-[11px] font-bold uppercase text-amber-700">Daily Average (${daysInMonth} Days)</div>
-                                <div id="prod-grand-daily-avg" class="text-xl font-black text-amber-950 mt-0.5">${formatNum(grandDailyAvg, 1)}</div>
-                            </div>
-                            <i data-lucide="trending-up" class="w-6 h-6 text-amber-600"></i>
-                        </div>
-                        <div class="p-3.5 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-between">
-                            <div>
-                                <div class="text-[11px] font-bold uppercase text-indigo-700">Active Production Items</div>
-                                <div class="text-xl font-black text-indigo-950 mt-0.5">${visibleItems.length} Items</div>
-                            </div>
-                            <i data-lucide="layers" class="w-6 h-6 text-indigo-600"></i>
-                        </div>
-                    </div>
 
-                    <div class="flex items-center justify-between bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl text-xs text-slate-700">
-                        <span class="font-medium">
-                            ${canEdit
-                                ? '<strong>Tip:</strong> Double-click any day cell to edit. Press <strong>Enter</strong> to save & move down, <strong>Tab</strong> to save & move right, or <strong>Esc</strong> to cancel.'
-                                : 'Read-only mode: You have View permission for the Daily Production Sheet.'}
-                        </span>
-                        <span class="font-mono font-bold text-slate-500">Calendar: ${escapeHtml(prodSheetSelectedDate)} • ${escapeHtml(monthLabel)}</span>
-                    </div>
+                            <div class="flex flex-wrap items-end gap-2">
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Search Item</label>
+                                    <div class="relative">
+                                        <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5"></i>
+                                        <input type="text" id="prod-sheet-search" value="${escapeHtml(prodSheetSearch)}" placeholder="Code or item name..." class="pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-600 outline-none w-48 sm:w-56">
+                                    </div>
+                                </div>
+                                <button type="button" onclick="searchProductionSheet()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
+                                    <i data-lucide="search" class="w-3.5 h-3.5"></i> Search
+                                </button>
+                                ${prodSheetSearch || prodSheetCatId !== 'ALL' ? `
+                                    <button type="button" onclick="clearProductionSheetFilters()" class="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition">
+                                        Clear
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
 
-                    <div class="overflow-x-auto rounded-xl border border-slate-300 shadow-inner max-h-[65vh]">
-                        <table id="daily-production-table" class="excel-grid w-full text-left text-xs whitespace-nowrap border-collapse">
-                            <thead class="sticky top-0 z-20">
-                                <tr class="bg-slate-900 text-white font-bold uppercase text-[11px] select-none">
-                                    <th class="py-2.5 px-2.5 text-center w-12 bg-slate-900">Sr</th>
-                                    <th class="py-2.5 px-2.5 bg-slate-900">Code</th>
-                                    <th class="py-2.5 px-3 bg-slate-900 sticky left-0 z-30 min-w-[190px]">Item Name</th>
-                                    ${dayColumns.map(d => `<th class="py-2.5 px-2 text-center ${selectedDayNum === d ? 'bg-blue-700 text-white' : 'bg-slate-800'} min-w-[46px]">${d}</th>`).join('')}
-                                    <th class="py-2.5 px-3 text-center bg-emerald-800 text-white font-extrabold min-w-[95px]">Month Total</th>
-                                    <th class="py-2.5 px-3 text-center bg-amber-700 text-white font-extrabold min-w-[95px]">Daily Avg</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-300 bg-white">
-                                ${visibleItems.length === 0 ? `
-                                    <tr>
-                                        <td colspan="${5 + daysInMonth}" class="p-10 text-center text-slate-400 font-medium">
-                                            No active items found. Add items under <strong>App Settings &gt; Categories &amp; Item Master</strong> or import an Excel production sheet.
-                                        </td>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                            <div class="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 flex items-center justify-between">
+                                <div>
+                                    <div class="text-[11px] font-extrabold uppercase text-emerald-700">Month Total (${escapeHtml(monthLabel)})</div>
+                                    <div id="prod-grand-total" class="text-2xl font-black text-emerald-950 mt-0.5">${formatNum(grandMonthTotal, 0)}</div>
+                                    <div class="text-[11px] text-emerald-700 mt-0.5">${visibleItems.length} active item(s)</div>
+                                </div>
+                                <div class="w-10 h-10 rounded-xl bg-emerald-600/10 text-emerald-700 flex items-center justify-center">
+                                    <i data-lucide="sigma" class="w-5 h-5"></i>
+                                </div>
+                            </div>
+
+                            <div class="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 flex items-center justify-between">
+                                <div>
+                                    <div class="text-[11px] font-extrabold uppercase text-amber-700">Daily Average (${daysInMonth} Days)</div>
+                                    <div id="prod-grand-daily-avg" class="text-2xl font-black text-amber-950 mt-0.5">${formatNum(grandDailyAvg, 1)}</div>
+                                    <div class="text-[11px] text-amber-700 mt-0.5">Avg output per calendar day</div>
+                                </div>
+                                <div class="w-10 h-10 rounded-xl bg-amber-600/10 text-amber-700 flex items-center justify-center">
+                                    <i data-lucide="trending-up" class="w-5 h-5"></i>
+                                </div>
+                            </div>
+
+                            <div class="p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 flex items-center justify-between">
+                                <div>
+                                    <div class="text-[11px] font-extrabold uppercase text-indigo-700">Active Production Days</div>
+                                    <div id="prod-active-days-kpi" class="text-2xl font-black text-indigo-950 mt-0.5">${activeDaysCount} / ${daysInMonth} Days</div>
+                                    <div class="text-[11px] text-indigo-700 mt-0.5">Days with recorded output</div>
+                                </div>
+                                <div class="w-10 h-10 rounded-xl bg-indigo-600/10 text-indigo-700 flex items-center justify-center">
+                                    <i data-lucide="calendar-check" class="w-5 h-5"></i>
+                                </div>
+                            </div>
+
+                            <div class="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 flex items-center justify-between">
+                                <div class="min-w-0 pr-2">
+                                    <div class="text-[11px] font-extrabold uppercase text-slate-600">Top Produced Item</div>
+                                    <div id="prod-top-item-name" class="text-base font-black text-slate-900 mt-0.5 truncate">${escapeHtml(topItem.name)}</div>
+                                    <div id="prod-top-item-val" class="text-xs font-bold text-indigo-700 mt-0.5">${formatNum(topItem.total, 0)} units</div>
+                                </div>
+                                <div class="w-10 h-10 rounded-xl bg-slate-800/10 text-slate-800 flex items-center justify-center shrink-0">
+                                    <i data-lucide="award" class="w-5 h-5"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-4">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                        <i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-600"></i>
+                                        Daily Production Trend (Days 1–${daysInMonth})
+                                    </h4>
+                                    <span class="text-[11px] font-semibold text-slate-400">Live updates on cell edit</span>
+                                </div>
+                                <div class="h-52">
+                                    <canvas id="prod-daily-trend-chart"></canvas>
+                                </div>
+                            </div>
+
+                            <div class="bg-white border border-slate-200 rounded-2xl p-4">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                        <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-600"></i>
+                                        Top Items Share
+                                    </h4>
+                                    <span class="text-[11px] font-semibold text-slate-400">Top 6 items</span>
+                                </div>
+                                <div class="h-52">
+                                    <canvas id="prod-top-items-chart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center justify-between gap-2 bg-indigo-50/60 border border-indigo-100 px-4 py-2 rounded-xl text-xs text-slate-700">
+                            <span class="font-medium">
+                                ${canEdit
+                                    ? '<strong>Inline Grid:</strong> Double-click any day cell to edit. Press <strong>Enter</strong> to save &amp; move down, <strong>Tab</strong> to save &amp; move right, or <strong>Esc</strong> to cancel.'
+                                    : 'Read-only mode: You have View permission for the Daily Production Sheet.'}
+                            </span>
+                            <span class="font-mono font-bold text-indigo-700">Calendar: ${escapeHtml(prodSheetSelectedDate)} • ${escapeHtml(monthLabel)}</span>
+                        </div>
+
+                        <div class="overflow-x-auto rounded-xl border border-slate-300 shadow-inner max-h-[62vh]">
+                            <table id="daily-production-table" class="excel-grid w-full text-left text-xs whitespace-nowrap border-collapse">
+                                <thead class="sticky top-0 z-20">
+                                    <tr class="bg-slate-900 text-white font-bold uppercase text-[11px] select-none">
+                                        <th class="py-2.5 px-2.5 text-center w-12 bg-slate-900">Sr</th>
+                                        <th class="py-2.5 px-2.5 bg-slate-900">Code</th>
+                                        <th class="py-2.5 px-3 bg-slate-900 sticky left-0 z-30 min-w-[190px]">Item Name</th>
+                                        ${dayColumns.map(d => `<th class="py-2.5 px-2 text-center ${selectedDayNum === d ? 'bg-blue-700 text-white' : 'bg-slate-800'} min-w-[46px]">${d}</th>`).join('')}
+                                        <th class="py-2.5 px-3 text-center bg-emerald-800 text-white font-extrabold min-w-[95px]">Month Total</th>
+                                        <th class="py-2.5 px-3 text-center bg-amber-700 text-white font-extrabold min-w-[95px]">Daily Avg</th>
                                     </tr>
-                                ` : rowsHtml}
-                            </tbody>
-                            <tfoot class="sticky bottom-0 z-20 font-extrabold text-xs">
-                                <tr class="bg-emerald-100 text-emerald-950">
-                                    <td colspan="3" class="py-2.5 px-3 text-right uppercase tracking-wider bg-emerald-100 sticky left-0 z-30">Daily Total Production</td>
-                                    ${dayColumns.map(d => `<td id="prod-foot-total-d${d}" class="py-2.5 px-2 text-center font-bold">${formatNum(dayColTotals[d], 0)}</td>`).join('')}
-                                    <td class="py-2.5 px-3 text-center font-black bg-emerald-200 text-emerald-950">${formatNum(grandMonthTotal, 0)}</td>
-                                    <td id="prod-foot-grand-avg" class="py-2.5 px-3 text-center font-black bg-amber-200 text-amber-950">${formatNum(grandDailyAvg, 1)}</td>
-                                </tr>
-                                <tr class="bg-amber-100 text-amber-950">
-                                    <td colspan="3" class="py-2 px-3 text-right uppercase tracking-wider bg-amber-100 sticky left-0 z-30">Daily Average / Item</td>
-                                    ${dayColumns.map(d => `<td id="prod-foot-avg-d${d}" class="py-2 px-2 text-center font-semibold">${formatNum(dayColTotals[d] / itemCountSafe, 1)}</td>`).join('')}
-                                    <td class="py-2 px-3 text-center font-bold bg-emerald-100 text-emerald-900">${formatNum(grandMonthTotal / itemCountSafe, 1)}</td>
-                                    <td class="py-2 px-3 text-center font-bold bg-amber-200 text-amber-950">${formatNum(grandDailyAvg / itemCountSafe, 1)}</td>
-                                </tr>
-                            </tfoot>
-                        </table>
+                                </thead>
+                                <tbody class="divide-y divide-slate-300 bg-white">
+                                    ${visibleItems.length === 0 ? `
+                                        <tr>
+                                            <td colspan="${5 + daysInMonth}" class="p-10 text-center text-slate-400 font-medium">
+                                                No active items found. Add items under <strong>App Settings &gt; Categories &amp; Item Master</strong> or import an Excel production sheet.
+                                            </td>
+                                        </tr>
+                                    ` : rowsHtml}
+                                </tbody>
+                                <tfoot class="sticky bottom-0 z-20 font-extrabold text-xs">
+                                    <tr class="bg-emerald-100 text-emerald-950">
+                                        <td colspan="3" class="py-2.5 px-3 text-right uppercase tracking-wider bg-emerald-100 sticky left-0 z-30">Daily Total Production</td>
+                                        ${dayColumns.map(d => `<td id="prod-foot-total-d${d}" class="py-2.5 px-2 text-center font-bold">${formatNum(dayColTotals[d], 0)}</td>`).join('')}
+                                        <td class="py-2.5 px-3 text-center font-black bg-emerald-200 text-emerald-950">${formatNum(grandMonthTotal, 0)}</td>
+                                        <td id="prod-foot-grand-avg" class="py-2.5 px-3 text-center font-black bg-amber-200 text-amber-950">${formatNum(grandDailyAvg, 1)}</td>
+                                    </tr>
+                                    <tr class="bg-amber-100 text-amber-950">
+                                        <td colspan="3" class="py-2 px-3 text-right uppercase tracking-wider bg-amber-100 sticky left-0 z-30">Daily Average / Item</td>
+                                        ${dayColumns.map(d => `<td id="prod-foot-avg-d${d}" class="py-2 px-2 text-center font-semibold">${formatNum(dayColTotals[d] / itemCountSafe, 1)}</td>`).join('')}
+                                        <td class="py-2 px-3 text-center font-bold bg-emerald-100 text-emerald-900">${formatNum(grandMonthTotal / itemCountSafe, 1)}</td>
+                                        <td class="py-2 px-3 text-center font-bold bg-amber-200 text-amber-950">${formatNum(grandDailyAvg / itemCountSafe, 1)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     </div>
                 </div>
             `;
+
+            renderProductionSheetCharts(ym, daysInMonth, visibleItems, dayColTotals);
 
             document.getElementById('prod-sheet-month').onchange = e => {
                 prodSheetYearMonth = e.target.value || TODAY.slice(0, 7);
@@ -2260,6 +2476,7 @@
                     prodSheetSelectedDate = `${prodSheetYearMonth}-01`;
                 }
                 renderProductionSheetView(container);
+                lucide.createIcons();
             };
             document.getElementById('prod-sheet-date').onchange = e => {
                 const chosen = e.target.value;
@@ -2268,25 +2485,41 @@
                     prodSheetYearMonth = chosen.slice(0, 7);
                 }
                 renderProductionSheetView(container);
+                lucide.createIcons();
             };
             document.getElementById('prod-sheet-cat').onchange = e => {
                 prodSheetCatId = e.target.value;
                 renderProductionSheetView(container);
+                lucide.createIcons();
             };
             const searchInp = document.getElementById('prod-sheet-search');
             if (searchInp) {
-                searchInp.addEventListener('input', e => {
-                    prodSheetSearch = e.target.value;
-                    renderProductionSheetView(container);
-                    const nextInp = document.getElementById('prod-sheet-search');
-                    if (nextInp) {
-                        nextInp.focus();
-                        const len = nextInp.value.length;
-                        nextInp.setSelectionRange(len, len);
+                searchInp.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        prodSheetSearch = e.target.value;
+                        renderProductionSheetView(container);
+                        lucide.createIcons();
                     }
                 });
             }
         }
+
+        window.searchProductionSheet = function() {
+            const searchInp = document.getElementById('prod-sheet-search');
+            const catSel = document.getElementById('prod-sheet-cat');
+            if (searchInp) prodSheetSearch = searchInp.value;
+            if (catSel) prodSheetCatId = catSel.value;
+            renderProductionSheetView(document.getElementById('main-content'));
+            lucide.createIcons();
+        };
+
+        window.clearProductionSheetFilters = function() {
+            prodSheetSearch = '';
+            prodSheetCatId = 'ALL';
+            renderProductionSheetView(document.getElementById('main-content'));
+            lucide.createIcons();
+        };
 
         window.startProductionCellEdit = function(td, ym, daysInMonth) {
             if (!canEditScreen('production-sheet')) return;
@@ -2337,7 +2570,7 @@
                     }
                     return true;
                 });
-                recalculateProductionSheetDom(daysInMonth, visibleItems);
+                recalculateProductionSheetDom(daysInMonth, visibleItems, ym);
 
                 if (navMode === 'down') {
                     const nextCell = document.querySelector(`td.prod-day-cell[data-row="${rowIdx + 1}"][data-col="${colIdx}"]`);
@@ -2392,7 +2625,7 @@
                     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
                     let headerRowIdx = -1;
-                    const dayColMap = {}; // dayNum -> colIndex
+                    const dayColMap = {};
 
                     for (let r = 0; r < Math.min(rows.length, 10); r++) {
                         const row = rows[r] || [];
@@ -2548,10 +2781,19 @@
         };
 
         // ==================== 6. PRODUCTION REPORTS (MONTHLY / QUARTERLY / YEARLY) ====================
-        let reportPeriodType = 'monthly'; // 'monthly' | 'quarterly' | 'yearly'
+        let reportPeriodType = 'monthly';
         let reportFromDate = `${TODAY.slice(0, 8)}01`;
         let reportToDate = TODAY;
         let reportCatId = 'ALL';
+        let reportSearchQuery = '';
+        let reportRangeChartInstance = null;
+
+        function destroyProductionReportChart() {
+            if (reportRangeChartInstance) {
+                try { reportRangeChartInstance.destroy(); } catch (e) {}
+                reportRangeChartInstance = null;
+            }
+        }
 
         function parseIsoDateToUtcMs(isoStr) {
             const parts = String(isoStr || '').split('-');
@@ -2616,9 +2858,16 @@
             const effectiveFromIso = formatUtcMsToIso(startMs);
             const effectiveToIso = formatUtcMsToIso(endMs);
 
+            const q = (reportSearchQuery || '').trim().toLowerCase();
             const filteredItems = state.items.filter(it => {
                 if (!isItemActive(it)) return false;
                 if (reportCatId !== 'ALL' && it.categoryId !== reportCatId) return false;
+                if (q) {
+                    const matchName = String(it.name || '').toLowerCase().includes(q);
+                    const matchCode = String(it.code || '').toLowerCase().includes(q);
+                    const matchUnit = String(it.unit || '').toLowerCase().includes(q);
+                    if (!matchName && !matchCode && !matchUnit) return false;
+                }
                 return true;
             });
 
@@ -2629,7 +2878,6 @@
                 prodMap[p.yearMonth][p.itemId] = p.days || {};
             });
 
-            // Build day-by-day columns (1 to 31) across the selected From Date -> To Date range
             const dayKeys = [];
             const dayMetaByKey = {};
             for (let i = 0; i < totalDaysInRange; i++) {
@@ -2708,158 +2956,278 @@
             };
         }
 
+        function renderProductionReportChart(ds) {
+            destroyProductionReportChart();
+            if (!window.Chart) return;
+            const canvas = document.getElementById('prod-report-range-chart');
+            if (!canvas) return;
+
+            const labels = ds.dayKeys.map(k => ds.dayMetaByKey[k].iso);
+            const values = ds.dayKeys.map(k => ds.colTotals[k] || 0);
+            const avgPerDay = ds.totalDaysInRange > 0 ? ds.grandTotal / ds.totalDaysInRange : 0;
+            const avgLine = labels.map(() => Number(avgPerDay.toFixed(2)));
+
+            reportRangeChartInstance = new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Daily Production',
+                            data: values,
+                            borderColor: 'rgb(79, 70, 229)',
+                            backgroundColor: 'rgba(79, 70, 229, 0.14)',
+                            borderWidth: 2.5,
+                            fill: true,
+                            tension: 0.28,
+                            pointRadius: labels.length > 45 ? 1 : 3
+                        },
+                        {
+                            label: `Selected Range Average (${formatNum(avgPerDay, 1)})`,
+                            data: avgLine,
+                            borderColor: 'rgb(217, 119, 6)',
+                            borderDash: [6, 5],
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11, weight: '600' } } }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 16, font: { size: 10 } } },
+                        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
         function renderProductionReportsView(container) {
             const ds = buildProductionReportDataset();
             const overallSelectedAvg = ds.grandTotal / ds.totalDaysInRange;
             const itemCountSafe = ds.rows.length || 1;
 
             container.innerHTML = `
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
-                    <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200">
-                        <div class="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200">
-                            <button onclick="setReportPeriodType('monthly')" class="px-4 py-2 rounded-lg text-xs font-extrabold transition ${reportPeriodType === 'monthly' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden space-y-6">
+                    <div class="bg-gradient-to-r from-indigo-950 via-slate-900 to-emerald-950 text-white px-6 py-5 flex flex-wrap items-center justify-between gap-4">
+                        <div class="flex items-center gap-3.5">
+                            <div class="w-11 h-11 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shrink-0">
+                                <i data-lucide="bar-chart-3" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <div class="text-[11px] font-extrabold uppercase tracking-wider text-indigo-300">Dynamic Analytics &amp; Day-by-Day Ledger</div>
+                                <h3 class="text-lg font-extrabold tracking-tight">Production Reports (${escapeHtml(reportPeriodType.toUpperCase())})</h3>
+                            </div>
+                        </div>
+
+                        <div class="inline-flex p-1 rounded-xl bg-slate-800/90 border border-slate-700">
+                            <button onclick="setReportPeriodType('monthly')" class="px-4 py-1.5 rounded-lg text-xs font-extrabold transition ${reportPeriodType === 'monthly' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-300 hover:text-white'}">
                                 Monthly
                             </button>
-                            <button onclick="setReportPeriodType('quarterly')" class="px-4 py-2 rounded-lg text-xs font-extrabold transition ${reportPeriodType === 'quarterly' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}">
+                            <button onclick="setReportPeriodType('quarterly')" class="px-4 py-1.5 rounded-lg text-xs font-extrabold transition ${reportPeriodType === 'quarterly' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-300 hover:text-white'}">
                                 Quarterly
                             </button>
-                            <button onclick="setReportPeriodType('yearly')" class="px-4 py-2 rounded-lg text-xs font-extrabold transition ${reportPeriodType === 'yearly' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}">
+                            <button onclick="setReportPeriodType('yearly')" class="px-4 py-1.5 rounded-lg text-xs font-extrabold transition ${reportPeriodType === 'yearly' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-300 hover:text-white'}">
                                 Yearly
                             </button>
                         </div>
-
-                        <div class="flex flex-wrap items-end gap-3">
-                            <div>
-                                <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">From Date</label>
-                                <input type="date" id="rep-from-date" value="${escapeHtml(reportFromDate)}" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
-                            </div>
-
-                            <div>
-                                <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">To Date</label>
-                                <input type="date" id="rep-to-date" value="${escapeHtml(reportToDate)}" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
-                            </div>
-
-                            <div>
-                                <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Category</label>
-                                <select id="rep-cat" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
-                                    <option value="ALL">-- All Categories --</option>
-                                    ${state.categories.map(c => `<option value="${c.id}" ${c.id === reportCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
-                                </select>
-                            </div>
-
-                            <button type="button" onclick="applyProductionReportFilter()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
-                                <i data-lucide="search" class="w-4 h-4"></i> Show
-                            </button>
-
-                            <button type="button" onclick="exportProductionReportExcel()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
-                                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export Excel
-                            </button>
-                            <button type="button" onclick="exportProductionReportPdf()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
-                                <i data-lucide="file-text" class="w-4 h-4"></i> Export PDF
-                            </button>
-                        </div>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div class="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200">
-                            <div class="text-[11px] font-extrabold uppercase text-emerald-700">Selected Range Total</div>
-                            <div class="text-2xl font-black text-emerald-950 mt-1">${formatNum(ds.grandTotal, 0)}</div>
-                            <div class="text-[11px] text-emerald-700 mt-1">${ds.activeProducedItemsCount} active items produced</div>
-                        </div>
-                        <div class="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200">
-                            <div class="text-[11px] font-extrabold uppercase text-amber-700">Average (${ds.totalDaysInRange} Selected Day${ds.totalDaysInRange === 1 ? '' : 's'})</div>
-                            <div class="text-2xl font-black text-amber-950 mt-1">${formatNum(overallSelectedAvg, 1)}</div>
-                            <div class="text-[11px] text-amber-700 mt-1">${escapeHtml(ds.effectiveFromIso)} to ${escapeHtml(ds.effectiveToIso)}</div>
-                        </div>
-                        <div class="p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200">
-                            <div class="text-[11px] font-extrabold uppercase text-indigo-700">Selected Days Count</div>
-                            <div class="text-2xl font-black text-indigo-950 mt-1">${ds.totalDaysInRange} Day${ds.totalDaysInRange === 1 ? '' : 's'}</div>
-                            <div class="text-[11px] text-indigo-700 mt-1">Day-by-day view (1 to 31)</div>
-                        </div>
-                        <div class="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200">
-                            <div class="text-[11px] font-extrabold uppercase text-slate-600">Top Produced Item</div>
-                            <div class="text-base font-black text-slate-900 mt-1 truncate">${escapeHtml(ds.topItem.name)}</div>
-                            <div class="text-xs font-bold text-indigo-700 mt-0.5">${formatNum(ds.topItem.total, 0)} units</div>
-                        </div>
-                    </div>
+                    <div class="px-6 space-y-6 pb-6">
+                        <div class="flex flex-wrap items-end justify-between gap-3 bg-slate-50 border border-slate-200 p-4 rounded-2xl">
+                            <div class="flex flex-wrap items-end gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">From Date</label>
+                                    <input type="date" id="rep-from-date" value="${escapeHtml(reportFromDate)}" class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+                                </div>
 
-                    <div class="flex items-center justify-between">
-                        <h4 class="text-sm font-extrabold text-slate-800">${escapeHtml(ds.periodTitle)}</h4>
-                        <span class="text-xs font-semibold text-slate-500">Total &amp; Average calculated for ${ds.totalDaysInRange} selected day(s)</span>
-                    </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">To Date</label>
+                                    <input type="date" id="rep-to-date" value="${escapeHtml(reportToDate)}" class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+                                </div>
 
-                    <div class="overflow-x-auto rounded-xl border border-slate-300">
-                        <table id="production-report-table" class="excel-grid w-full text-left text-xs whitespace-nowrap border-collapse">
-                            <thead>
-                                <tr class="bg-slate-900 text-white font-bold uppercase text-[11px]">
-                                    <th class="py-3 px-2.5 text-center w-12">Sr</th>
-                                    <th class="py-3 px-2.5">Code</th>
-                                    <th class="py-3 px-3 sticky left-0 bg-slate-900 z-10 min-w-[180px]">Item Name</th>
-                                    <th class="py-3 px-2.5 text-center">Unit</th>
-                                    ${ds.dayKeys.map(k => {
-                                        const meta = ds.dayMetaByKey[k];
-                                        return `<th class="py-3 px-2 text-center bg-slate-800 min-w-[44px]" title="${escapeHtml(meta.fullTitle)}">${meta.label}</th>`;
-                                    }).join('')}
-                                    <th class="py-3 px-3 text-center bg-emerald-800 text-white font-extrabold min-w-[95px]">Total</th>
-                                    <th class="py-3 px-3 text-center bg-amber-700 text-white font-extrabold min-w-[105px]">Average (${ds.totalDaysInRange}d)</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-200 bg-white">
-                                ${ds.rows.length === 0 ? `
-                                    <tr><td colspan="${6 + ds.dayKeys.length}" class="p-10 text-center text-slate-400 font-medium">No active items found for this report filter.</td></tr>
-                                ` : ds.rows.map(r => `
-                                    <tr class="hover:bg-slate-50">
-                                        <td class="py-2 px-2.5 text-center font-mono text-slate-500">${r.sr}</td>
-                                        <td class="py-2 px-2.5 font-mono font-bold text-slate-700">${escapeHtml(r.code)}</td>
-                                        <td class="py-2 px-3 font-semibold text-slate-900 sticky left-0 bg-white z-10 shadow-[1px_0_0_#cbd5e1]">${escapeHtml(r.name)}</td>
-                                        <td class="py-2 px-2.5 text-center"><span class="px-2 py-0.5 bg-slate-100 rounded font-bold text-slate-600">${escapeHtml(r.unit)}</span></td>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Category</label>
+                                    <select id="rep-cat" class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+                                        <option value="ALL">-- All Categories --</option>
+                                        ${state.categories.map(c => `<option value="${c.id}" ${c.id === reportCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Search</label>
+                                    <div class="relative">
+                                        <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5"></i>
+                                        <input type="text" id="rep-search-input" value="${escapeHtml(reportSearchQuery)}" placeholder="Item code, name, unit..." class="pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-800 w-44 sm:w-52">
+                                    </div>
+                                </div>
+
+                                <button type="button" onclick="applyProductionReportFilter()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
+                                    <i data-lucide="search" class="w-3.5 h-3.5"></i> Search
+                                </button>
+                                <button type="button" onclick="applyProductionReportFilter()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
+                                    <i data-lucide="eye" class="w-3.5 h-3.5"></i> Show
+                                </button>
+                                ${reportSearchQuery || reportCatId !== 'ALL' ? `
+                                    <button type="button" onclick="clearProductionReportFilters()" class="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition">
+                                        Clear
+                                    </button>
+                                ` : ''}
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button type="button" onclick="exportProductionReportExcel()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
+                                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export Excel
+                                </button>
+                                <button type="button" onclick="exportProductionReportPdf()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
+                                    <i data-lucide="file-text" class="w-4 h-4"></i> Export PDF
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div class="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200">
+                                <div class="text-[11px] font-extrabold uppercase text-emerald-700">Selected Range Total</div>
+                                <div class="text-2xl font-black text-emerald-950 mt-1">${formatNum(ds.grandTotal, 0)}</div>
+                                <div class="text-[11px] text-emerald-700 mt-1">${ds.activeProducedItemsCount} active items produced</div>
+                            </div>
+                            <div class="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200">
+                                <div class="text-[11px] font-extrabold uppercase text-amber-700">Average (${ds.totalDaysInRange} Selected Day${ds.totalDaysInRange === 1 ? '' : 's'})</div>
+                                <div class="text-2xl font-black text-amber-950 mt-1">${formatNum(overallSelectedAvg, 1)}</div>
+                                <div class="text-[11px] text-amber-700 mt-1">${escapeHtml(ds.effectiveFromIso)} to ${escapeHtml(ds.effectiveToIso)}</div>
+                            </div>
+                            <div class="p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200">
+                                <div class="text-[11px] font-extrabold uppercase text-indigo-700">Selected Days Count</div>
+                                <div class="text-2xl font-black text-indigo-950 mt-1">${ds.totalDaysInRange} Day${ds.totalDaysInRange === 1 ? '' : 's'}</div>
+                                <div class="text-[11px] text-indigo-700 mt-1">Day-by-day view (1 to 31)</div>
+                            </div>
+                            <div class="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200">
+                                <div class="text-[11px] font-extrabold uppercase text-slate-600">Top Produced Item</div>
+                                <div class="text-base font-black text-slate-900 mt-1 truncate">${escapeHtml(ds.topItem.name)}</div>
+                                <div class="text-xs font-bold text-indigo-700 mt-0.5">${formatNum(ds.topItem.total, 0)} units</div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 rounded-2xl p-4">
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                    <i data-lucide="activity" class="w-4 h-4 text-indigo-600"></i>
+                                    Production Trend vs. Selected Date Average
+                                </h4>
+                                <span class="text-xs font-semibold text-slate-500">${escapeHtml(ds.effectiveFromIso)} → ${escapeHtml(ds.effectiveToIso)}</span>
+                            </div>
+                            <div class="h-52">
+                                <canvas id="prod-report-range-chart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <h4 class="text-sm font-extrabold text-slate-800">${escapeHtml(ds.periodTitle)}</h4>
+                            <span class="text-xs font-semibold text-slate-500">Total &amp; Average calculated strictly for ${ds.totalDaysInRange} selected day(s)</span>
+                        </div>
+
+                        <div class="overflow-x-auto rounded-xl border border-slate-300">
+                            <table id="production-report-table" class="excel-grid w-full text-left text-xs whitespace-nowrap border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-900 text-white font-bold uppercase text-[11px]">
+                                        <th class="py-3 px-2.5 text-center w-12">Sr</th>
+                                        <th class="py-3 px-2.5">Code</th>
+                                        <th class="py-3 px-3 sticky left-0 bg-slate-900 z-10 min-w-[180px]">Item Name</th>
+                                        <th class="py-3 px-2.5 text-center">Unit</th>
                                         ${ds.dayKeys.map(k => {
-                                            const v = r.values[k] || 0;
-                                            return `<td class="py-2 px-2 text-center font-semibold ${v > 0 ? 'text-slate-900 bg-emerald-50/30' : 'text-slate-400'}">${formatNum(v, 0)}</td>`;
+                                            const meta = ds.dayMetaByKey[k];
+                                            return `<th class="py-3 px-2 text-center bg-slate-800 min-w-[44px]" title="${escapeHtml(meta.fullTitle)}">${meta.label}</th>`;
                                         }).join('')}
-                                        <td class="py-2 px-3 text-center font-extrabold bg-emerald-50 text-emerald-900">${formatNum(r.total, 0)}</td>
-                                        <td class="py-2 px-3 text-center font-bold bg-amber-50 text-amber-900">${formatNum(r.avgForSelectedDates, 1)}</td>
+                                        <th class="py-3 px-3 text-center bg-emerald-800 text-white font-extrabold min-w-[95px]">Total</th>
+                                        <th class="py-3 px-3 text-center bg-amber-700 text-white font-extrabold min-w-[105px]">Average (${ds.totalDaysInRange}d)</th>
                                     </tr>
-                                `).join('')}
-                            </tbody>
-                            <tfoot class="font-extrabold text-xs">
-                                <tr class="bg-emerald-100 text-emerald-950">
-                                    <td colspan="4" class="py-2.5 px-3 text-right uppercase sticky left-0 bg-emerald-100 z-10">Total Production</td>
-                                    ${ds.dayKeys.map(k => `<td class="py-2.5 px-2 text-center font-bold">${formatNum(ds.colTotals[k], 0)}</td>`).join('')}
-                                    <td class="py-2.5 px-3 text-center font-black bg-emerald-200 text-emerald-950">${formatNum(ds.grandTotal, 0)}</td>
-                                    <td class="py-2.5 px-3 text-center font-black bg-amber-200 text-amber-950">${formatNum(overallSelectedAvg, 1)}</td>
-                                </tr>
-                                <tr class="bg-amber-100 text-amber-950">
-                                    <td colspan="4" class="py-2 px-3 text-right uppercase sticky left-0 bg-amber-100 z-10">Average / Item</td>
-                                    ${ds.dayKeys.map(k => `<td class="py-2 px-2 text-center font-semibold">${formatNum(ds.colTotals[k] / itemCountSafe, 1)}</td>`).join('')}
-                                    <td class="py-2 px-3 text-center font-bold bg-emerald-100 text-emerald-900">${formatNum(ds.grandTotal / itemCountSafe, 1)}</td>
-                                    <td class="py-2 px-3 text-center font-bold bg-amber-200 text-amber-950">${formatNum(overallSelectedAvg / itemCountSafe, 1)}</td>
-                                </tr>
-                            </tfoot>
-                        </table>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200 bg-white">
+                                    ${ds.rows.length === 0 ? `
+                                        <tr><td colspan="${6 + ds.dayKeys.length}" class="p-10 text-center text-slate-400 font-medium">No active items found for this report filter.</td></tr>
+                                    ` : ds.rows.map(r => `
+                                        <tr class="hover:bg-slate-50">
+                                            <td class="py-2 px-2.5 text-center font-mono text-slate-500">${r.sr}</td>
+                                            <td class="py-2 px-2.5 font-mono font-bold text-slate-700">${escapeHtml(r.code)}</td>
+                                            <td class="py-2 px-3 font-semibold text-slate-900 sticky left-0 bg-white z-10 shadow-[1px_0_0_#cbd5e1]">${escapeHtml(r.name)}</td>
+                                            <td class="py-2 px-2.5 text-center"><span class="px-2 py-0.5 bg-slate-100 rounded font-bold text-slate-600">${escapeHtml(r.unit)}</span></td>
+                                            ${ds.dayKeys.map(k => {
+                                                const v = r.values[k] || 0;
+                                                return `<td class="py-2 px-2 text-center font-semibold ${v > 0 ? 'text-slate-900 bg-emerald-50/30' : 'text-slate-400'}">${formatNum(v, 0)}</td>`;
+                                            }).join('')}
+                                            <td class="py-2 px-3 text-center font-extrabold bg-emerald-50 text-emerald-900">${formatNum(r.total, 0)}</td>
+                                            <td class="py-2 px-3 text-center font-bold bg-amber-50 text-amber-900">${formatNum(r.avgForSelectedDates, 1)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                                <tfoot class="font-extrabold text-xs">
+                                    <tr class="bg-emerald-100 text-emerald-950">
+                                        <td colspan="4" class="py-2.5 px-3 text-right uppercase sticky left-0 bg-emerald-100 z-10">Total Production</td>
+                                        ${ds.dayKeys.map(k => `<td class="py-2.5 px-2 text-center font-bold">${formatNum(ds.colTotals[k], 0)}</td>`).join('')}
+                                        <td class="py-2.5 px-3 text-center font-black bg-emerald-200 text-emerald-950">${formatNum(ds.grandTotal, 0)}</td>
+                                        <td class="py-2.5 px-3 text-center font-black bg-amber-200 text-amber-950">${formatNum(overallSelectedAvg, 1)}</td>
+                                    </tr>
+                                    <tr class="bg-amber-100 text-amber-950">
+                                        <td colspan="4" class="py-2 px-3 text-right uppercase sticky left-0 bg-amber-100 z-10">Average / Item</td>
+                                        ${ds.dayKeys.map(k => `<td class="py-2 px-2 text-center font-semibold">${formatNum(ds.colTotals[k] / itemCountSafe, 1)}</td>`).join('')}
+                                        <td class="py-2 px-3 text-center font-bold bg-emerald-100 text-emerald-900">${formatNum(ds.grandTotal / itemCountSafe, 1)}</td>
+                                        <td class="py-2 px-3 text-center font-bold bg-amber-200 text-amber-950">${formatNum(overallSelectedAvg / itemCountSafe, 1)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     </div>
                 </div>
             `;
 
+            renderProductionReportChart(ds);
+
             const catSel = document.getElementById('rep-cat');
-            if (catSel) catSel.onchange = e => { reportCatId = e.target.value; renderProductionReportsView(container); };
+            if (catSel) catSel.onchange = e => { reportCatId = e.target.value; renderProductionReportsView(container); lucide.createIcons(); };
+
+            const searchInp = document.getElementById('rep-search-input');
+            if (searchInp) {
+                searchInp.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        applyProductionReportFilter();
+                    }
+                });
+            }
         }
 
         window.setReportPeriodType = function(type) {
             reportPeriodType = type;
             setDateRangeForPeriod(type);
             renderProductionReportsView(document.getElementById('main-content'));
+            lucide.createIcons();
         };
 
         window.applyProductionReportFilter = function() {
             const fromInp = document.getElementById('rep-from-date');
             const toInp = document.getElementById('rep-to-date');
             const catSel = document.getElementById('rep-cat');
+            const searchInp = document.getElementById('rep-search-input');
             if (fromInp && fromInp.value) reportFromDate = fromInp.value;
             if (toInp && toInp.value) reportToDate = toInp.value;
             if (catSel) reportCatId = catSel.value;
+            if (searchInp) reportSearchQuery = searchInp.value;
             renderProductionReportsView(document.getElementById('main-content'));
+            lucide.createIcons();
             showToast(`Showing report from ${reportFromDate} to ${reportToDate}`, 'info');
+        };
+
+        window.clearProductionReportFilters = function() {
+            reportCatId = 'ALL';
+            reportSearchQuery = '';
+            renderProductionReportsView(document.getElementById('main-content'));
+            lucide.createIcons();
         };
 
         window.exportProductionReportExcel = function() {
