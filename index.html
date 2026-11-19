@@ -169,7 +169,7 @@
                 </button>
             </div>
 
-            <nav id="sidebar-nav" class="flex-1 p-4 space-y-1.5 overflow-y-auto"></nav>
+            <nav id="sidebar-nav" class="flex-1 p-3.5 space-y-2 overflow-y-auto"></nav>
 
             <div class="p-4 border-t border-slate-800 space-y-3">
                 <div id="db-status-btn" class="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700/80 text-xs">
@@ -291,7 +291,7 @@
             orders: []
         };
 
-        const STORAGE_KEY = 'kty_store_order_secure_v9';
+        const STORAGE_KEY = 'kty_store_order_secure_v10';
         let state = JSON.parse(JSON.stringify(CLEAN_DEFAULT_DATA));
 
         async function ensureDefaultAdmin() {
@@ -473,6 +473,11 @@
         let lockoutUntil = 0;
         let inactivityTimer = null;
 
+        let expandedGroups = {
+            'order-transaction': true,
+            'app-settings': true
+        };
+
         // 15 Minutes Inactivity Timeout
         const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
 
@@ -605,32 +610,79 @@
             document.getElementById('login-view').classList.remove('hidden');
         };
 
-        function getAllowedRoutes() {
+        function getMenuGroups() {
             if (!currentUser) return [];
             const role = currentUser.role;
-            const allRoutes = [
-                { id: 'order-form', label: 'Stock Transfer Order Form', icon: 'clipboard-edit', roles: ['admin', 'branch'] },
-                { id: 'my-orders', label: 'Branch Order History', icon: 'history', roles: ['admin', 'branch', 'factory_warehouse'] },
-                { id: 'order-matrix', label: 'Consolidated Order Matrix', icon: 'table-2', roles: ['admin', 'factory_warehouse'] },
-                { id: 'delivery-challan', label: 'Delivery Challan & Print', icon: 'printer', roles: ['admin', 'factory_warehouse'] },
-                { id: 'master-items', label: 'Categories & Item Master', icon: 'package', roles: ['admin'] },
-                { id: 'master-locations', label: 'Branches & Destinations', icon: 'building-2', roles: ['admin'] },
-                { id: 'master-users', label: 'User Accounts & Roles', icon: 'users', roles: ['admin'] },
-                { id: 'system-settings', label: 'Company & System Info', icon: 'settings', roles: ['admin'] }
+            const groups = [
+                {
+                    id: 'order-transaction',
+                    label: 'Order Transaction',
+                    icon: 'arrow-left-right',
+                    children: [
+                        { id: 'order-form', label: 'Stock Transfer Order Form', icon: 'clipboard-edit', roles: ['admin', 'branch'] },
+                        { id: 'my-orders', label: 'Branch Order History', icon: 'history', roles: ['admin', 'branch', 'factory_warehouse'] },
+                        { id: 'order-matrix', label: 'Consolidated Order Matrix', icon: 'table-2', roles: ['admin', 'factory_warehouse'] },
+                        { id: 'delivery-challan', label: 'Delivery Challan & Print', icon: 'printer', roles: ['admin', 'factory_warehouse'] },
+                        { id: 'master-items', label: 'Categories & Item Master', icon: 'package', roles: ['admin'] }
+                    ]
+                },
+                {
+                    id: 'app-settings',
+                    label: 'App Settings',
+                    icon: 'sliders-horizontal',
+                    children: [
+                        { id: 'master-locations', label: 'Branches & Destinations', icon: 'building-2', roles: ['admin'] },
+                        { id: 'master-users', label: 'User Accounts & Roles', icon: 'users', roles: ['admin'] },
+                        { id: 'system-settings', label: 'Company & System Information', icon: 'settings', roles: ['admin'] }
+                    ]
+                }
             ];
-            return allRoutes.filter(r => r.roles.includes(role));
+
+            return groups
+                .map(g => ({
+                    ...g,
+                    children: g.children.filter(c => c.roles.includes(role))
+                }))
+                .filter(g => g.children.length > 0);
         }
+
+        function getAllowedRoutes() {
+            return getMenuGroups().flatMap(g => g.children);
+        }
+
+        window.toggleMenuGroup = function(groupId) {
+            expandedGroups[groupId] = !expandedGroups[groupId];
+            renderSidebarMenu();
+        };
 
         function renderSidebarMenu() {
             const nav = document.getElementById('sidebar-nav');
-            const items = getAllowedRoutes();
+            const groups = getMenuGroups();
 
-            nav.innerHTML = items.map(item => `
-                <button onclick="navigateTo('${item.id}')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${currentRoute === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
-                    <i data-lucide="${item.icon}" class="w-4 h-4 shrink-0"></i>
-                    <span>${item.label}</span>
-                </button>
-            `).join('');
+            nav.innerHTML = groups.map(group => {
+                const isOpen = expandedGroups[group.id] !== false;
+                const hasActiveChild = group.children.some(c => c.id === currentRoute);
+
+                return `
+                    <div class="rounded-xl bg-slate-800/40 border border-slate-800 overflow-hidden">
+                        <button onclick="toggleMenuGroup('${group.id}')" class="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-extrabold uppercase tracking-wider transition ${hasActiveChild ? 'text-blue-400 bg-slate-800/80' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'}">
+                            <span class="flex items-center gap-2.5">
+                                <i data-lucide="${group.icon}" class="w-4 h-4 shrink-0"></i>
+                                <span>${group.label}</span>
+                            </span>
+                            <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? 'rotate-0' : '-rotate-90'}"></i>
+                        </button>
+                        <div class="${isOpen ? 'block' : 'hidden'} px-2 pb-2 pt-1 space-y-1">
+                            ${group.children.map(item => `
+                                <button onclick="navigateTo('${item.id}')" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold transition ${currentRoute === item.id ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
+                                    <i data-lucide="${item.icon}" class="w-4 h-4 shrink-0"></i>
+                                    <span class="truncate">${item.label}</span>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
             lucide.createIcons();
         }
 
@@ -647,14 +699,14 @@
         function renderCurrentRoute() {
             const container = document.getElementById('main-content');
             const titles = {
-                'order-form': ['Stock Transfer Order Form', 'Submit branch stock requests to factory or warehouse'],
-                'my-orders': ['Branch Order History', 'View and track submitted stock transfer requests'],
-                'order-matrix': ['Consolidated Order Matrix', 'Review submitted orders by date, edit quantities inline, and execute challans'],
-                'delivery-challan': ['Delivery Challan & Print', 'Select multiple branches to print delivery challans one after another'],
-                'master-items': ['Categories & Item Master', 'Manage product categories, codes, and units'],
-                'master-locations': ['Branches & Destinations', 'Configure restaurant branches and supply warehouses'],
-                'master-users': ['User Accounts & Roles', 'Manage system credentials and access permissions'],
-                'system-settings': ['Company & System Information', 'Configure software branding, company details, and logo']
+                'order-form': ['Stock Transfer Order Form', 'Order Transaction • Submit branch stock requests to factory or warehouse'],
+                'my-orders': ['Branch Order History', 'Order Transaction • View and track submitted stock transfer requests'],
+                'order-matrix': ['Consolidated Order Matrix', 'Order Transaction • Review submitted orders by date, edit quantities inline, and execute challans'],
+                'delivery-challan': ['Delivery Challan & Print', 'Order Transaction • Select branches to generate and print delivery challans sequentially'],
+                'master-items': ['Categories & Item Master', 'Order Transaction • Manage product categories, codes, and units'],
+                'master-locations': ['Branches & Destinations', 'App Settings • Configure restaurant branches and supply warehouses'],
+                'master-users': ['User Accounts & Roles', 'App Settings • Manage system credentials and access permissions'],
+                'system-settings': ['Company & System Information', 'App Settings • Configure software branding, company details, and logo']
             };
             const [t, sub] = titles[currentRoute] || ['Dashboard', ''];
             document.getElementById('page-title').textContent = t;
@@ -679,6 +731,7 @@
             requestDate: TODAY,
             deliveryDate: TOMORROW,
             catIdx: 0,
+            searchQuery: '',
             quantities: {}
         };
 
@@ -688,16 +741,25 @@
             }
             const cats = state.categories;
             const activeCat = cats[orderFormState.catIdx] || cats[0];
-            const items = activeCat ? state.items.filter(i => i.categoryId === activeCat.id) : [];
+            const catItems = activeCat ? state.items.filter(i => i.categoryId === activeCat.id) : [];
+
+            const q = (orderFormState.searchQuery || '').trim().toLowerCase();
+            const items = q
+                ? catItems.filter(it =>
+                    String(it.name || '').toLowerCase().includes(q) ||
+                    String(it.code || '').toLowerCase().includes(q) ||
+                    String(it.unit || '').toLowerCase().includes(q)
+                )
+                : catItems;
 
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-                        <div class="flex items-center justify-between pb-4 mb-6 border-b border-slate-100">
+                        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-6 border-b border-slate-100">
                             <span class="px-3 py-1 rounded-full text-xs font-bold ${orderFormState.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}">
                                 ${orderFormState.isActive ? '● Form Active (Ready)' : '○ Locked (Click Add)'}
                             </span>
-                            <div class="flex gap-2">
+                            <div class="flex flex-wrap gap-2">
                                 <button onclick="activateOrderForm()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5 shadow-sm transition">
                                     <i data-lucide="plus-circle" class="w-4 h-4"></i> Add
                                 </button>
@@ -739,10 +801,10 @@
                         ${cats.length === 0 ? `
                             <div class="p-8 text-center text-slate-500 bg-slate-50 rounded-xl">
                                 <p class="font-bold">No categories or items found.</p>
-                                <p class="text-xs mt-1">Please add categories and items in the Master section first.</p>
+                                <p class="text-xs mt-1">Please add categories and items in Categories & Item Master first.</p>
                             </div>
                         ` : `
-                            <div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl">
+                            <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl">
                                 <select id="f-cat" class="px-4 py-2 bg-white border rounded-xl text-sm font-bold">
                                     ${cats.map((c, i) => `<option value="${i}" ${i === orderFormState.catIdx ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
                                 </select>
@@ -754,6 +816,16 @@
                                         Next <i data-lucide="chevron-right" class="w-4 h-4"></i>
                                     </button>
                                 </div>
+                            </div>
+
+                            <div class="relative">
+                                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
+                                <input type="text" id="f-item-search" value="${escapeHtml(orderFormState.searchQuery)}" placeholder="Search items by name, code, or unit..." class="w-full pl-10 pr-24 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition">
+                                ${orderFormState.searchQuery ? `
+                                    <button type="button" onclick="clearOrderSearch()" class="absolute right-2.5 top-2 px-2.5 py-1 text-xs font-bold text-slate-500 hover:text-slate-800 bg-slate-200/70 hover:bg-slate-200 rounded-lg transition">
+                                        Clear
+                                    </button>
+                                ` : ''}
                             </div>
 
                             <div class="overflow-x-auto border rounded-xl">
@@ -768,7 +840,9 @@
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y text-sm">
-                                        ${items.map((it, idx) => `
+                                        ${items.length === 0 ? `
+                                            <tr><td colspan="5" class="p-8 text-center text-slate-400 font-medium">No matching items found${q ? ` for "<strong>${escapeHtml(orderFormState.searchQuery)}</strong>"` : ''}.</td></tr>
+                                        ` : items.map((it, idx) => `
                                             <tr>
                                                 <td class="py-3 px-4 text-slate-500 font-mono">${idx + 1}</td>
                                                 <td class="py-3 px-4 font-mono font-bold">${escapeHtml(it.code)}</td>
@@ -787,15 +861,33 @@
                 </div>
             `;
 
-            if(document.getElementById('f-branch')) document.getElementById('f-branch').onchange = e => orderFormState.branchId = e.target.value;
-            if(document.getElementById('f-dest')) document.getElementById('f-dest').onchange = e => orderFormState.destinationId = e.target.value;
-            if(document.getElementById('f-req')) document.getElementById('f-req').onchange = e => orderFormState.requestDate = e.target.value;
-            if(document.getElementById('f-del')) document.getElementById('f-del').onchange = e => orderFormState.deliveryDate = e.target.value;
-            if(document.getElementById('f-cat')) document.getElementById('f-cat').onchange = e => {
+            if (document.getElementById('f-branch')) document.getElementById('f-branch').onchange = e => orderFormState.branchId = e.target.value;
+            if (document.getElementById('f-dest')) document.getElementById('f-dest').onchange = e => orderFormState.destinationId = e.target.value;
+            if (document.getElementById('f-req')) document.getElementById('f-req').onchange = e => orderFormState.requestDate = e.target.value;
+            if (document.getElementById('f-del')) document.getElementById('f-del').onchange = e => orderFormState.deliveryDate = e.target.value;
+            if (document.getElementById('f-cat')) document.getElementById('f-cat').onchange = e => {
                 orderFormState.catIdx = parseInt(e.target.value);
                 renderOrderFormView(container);
             };
+            const searchInput = document.getElementById('f-item-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', e => {
+                    orderFormState.searchQuery = e.target.value;
+                    renderOrderFormView(container);
+                    const nextSearch = document.getElementById('f-item-search');
+                    if (nextSearch) {
+                        nextSearch.focus();
+                        const len = nextSearch.value.length;
+                        nextSearch.setSelectionRange(len, len);
+                    }
+                });
+            }
         }
+
+        window.clearOrderSearch = function() {
+            orderFormState.searchQuery = '';
+            renderOrderFormView(document.getElementById('main-content'));
+        };
 
         window.activateOrderForm = function() {
             orderFormState.isActive = true;
@@ -806,6 +898,7 @@
         window.cancelOrderForm = function() {
             orderFormState.isActive = false;
             orderFormState.quantities = {};
+            orderFormState.searchQuery = '';
             renderOrderFormView(document.getElementById('main-content'));
             showToast('Order entry cancelled and locked.', 'info');
         };
@@ -855,6 +948,7 @@
 
             orderFormState.isActive = false;
             orderFormState.quantities = {};
+            orderFormState.searchQuery = '';
             showToast('Order saved and submitted successfully!', 'success');
             navigateTo('my-orders');
         };
@@ -970,7 +1064,6 @@
 
             const dateOrders = getSubmittedDateOrders(matrixFilterDate, destFilter);
 
-            // Only include branches that have a submitted order on the chosen date
             const activeBranches = state.branches.filter(b =>
                 dateOrders.some(o => o.branchId === b.id)
             );
@@ -1024,7 +1117,7 @@
                                     ${activeBranches.map(b => {
                                         const ord = dateOrders.find(o => o.branchId === b.id);
                                         return `
-                                            <th class="py-3 px-4 text-center bg-slate-100 text-slate-900 min-w-[130px]">
+                                            <th data-matrix-branch="true" class="py-3 px-4 text-center bg-slate-100 text-slate-900 min-w-[130px]">
                                                 <div>${escapeHtml(b.name)}</div>
                                                 <div class="text-[10px] font-mono font-semibold text-indigo-600 mt-0.5">${escapeHtml(ord?.id || '')}</div>
                                             </th>
@@ -1332,11 +1425,8 @@
             const s = state.settings || DEFAULT_SETTINGS;
             const dateOrders = getSubmittedDateOrders(challanDate, null);
 
-            const branchesToRender = challanSelectedBranchIds.length > 0
-                ? state.branches.filter(b => challanSelectedBranchIds.includes(b.id))
-                : state.branches;
-
-            const allSelected = state.branches.length > 0 && challanSelectedBranchIds.length === state.branches.length;
+            // Only generate challan layouts for explicitly selected branches; keep screen clear otherwise
+            const branchesToRender = state.branches.filter(b => challanSelectedBranchIds.includes(b.id));
 
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
@@ -1348,7 +1438,7 @@
                             </div>
 
                             <div class="flex flex-wrap items-center gap-2">
-                                <button onclick="printChallansOneAfterAnother()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm shadow-md shadow-indigo-600/25 flex items-center gap-2 transition">
+                                <button onclick="printChallansOneAfterAnother()" ${branchesToRender.length === 0 ? 'disabled' : ''} class="px-5 py-2.5 ${branchesToRender.length === 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/25'} font-bold rounded-xl text-sm flex items-center gap-2 transition">
                                     <i data-lucide="printer" class="w-4 h-4"></i> Print Selected One-by-One (${branchesToRender.length})
                                 </button>
                             </div>
@@ -1358,7 +1448,7 @@
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <label class="text-xs font-bold uppercase text-slate-600 flex items-center gap-1.5">
                                     <i data-lucide="list-checks" class="w-4 h-4 text-indigo-600"></i>
-                                    Select Branches to Print Sequentially
+                                    Select Branch(es) to Generate Challan & Print Sequentially
                                 </label>
                                 <div class="flex items-center gap-2 text-xs font-semibold">
                                     <button onclick="toggleAllChallanBranches(true)" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg flex items-center gap-1 transition">
@@ -1394,7 +1484,11 @@
 
                     <div id="printable-challan" class="space-y-6">
                         ${branchesToRender.length === 0
-                            ? `<div class="bg-white rounded-2xl shadow-sm border p-10 text-center text-slate-400 font-medium">No branches selected for Delivery Challan.</div>`
+                            ? `<div class="bg-white/80 rounded-2xl border border-dashed border-slate-300 p-12 text-center space-y-2">
+                                <i data-lucide="file-text" class="w-8 h-8 text-slate-300 mx-auto"></i>
+                                <p class="text-sm font-semibold text-slate-500">No branch selected yet</p>
+                                <p class="text-xs text-slate-400">Check one or more branches above to generate their Delivery Challan print layout.</p>
+                               </div>`
                             : branchesToRender.map((br, idx) => buildBranchChallanCard(br, dateOrders, s, idx, branchesToRender.length)).join('')
                         }
                     </div>
@@ -1426,15 +1520,13 @@
         };
 
         window.printChallansOneAfterAnother = function() {
-            const branchesToRender = challanSelectedBranchIds.length > 0
-                ? state.branches.filter(b => challanSelectedBranchIds.includes(b.id))
-                : state.branches;
+            const branchesToRender = state.branches.filter(b => challanSelectedBranchIds.includes(b.id));
 
             if (branchesToRender.length === 0) {
-                return showToast('Please select at least one branch to print.', 'warning');
+                return showToast('Please select at least one branch to generate and print a challan.', 'warning');
             }
 
-            showToast(`Preparing ${branchesToRender.length} branch challan(s) for sequential printing...`, 'info');
+            showToast(`Preparing ${branchesToRender.length} selected branch challan(s) for sequential printing...`, 'info');
             setTimeout(() => {
                 window.print();
             }, 150);
