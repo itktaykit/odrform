@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock Transfer, Supply Chain & Production Portal</title>
+    <title>Stock Transfer &amp; Supply Chain Portal</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -123,15 +123,15 @@
         </div>
     </div>
 
-    <!-- ==================== SECURE LOGIN SCREEN ==================== -->
+    <!-- ==================== SECURE LOGIN SCREEN (ALWAYS FIRST ON LOAD / LOGOUT) ==================== -->
     <div id="login-view" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-indigo-950 via-slate-900 to-emerald-950">
         <div class="bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl max-w-md w-full p-8 border border-white/60">
-            <div class="text-center mb-6">
+            <div class="text-center mb-7">
                 <div id="login-logo-container" class="w-24 h-24 bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-dashed border-indigo-200 text-indigo-500 rounded-3xl flex items-center justify-center mx-auto mb-4 overflow-hidden shadow-sm p-2">
                     <i data-lucide="building-2" class="w-10 h-10"></i>
                 </div>
                 <h1 id="login-company-name" class="text-2xl font-extrabold text-slate-900 tracking-tight">Enterprise Food &amp; Supply Co.</h1>
-                <p id="login-software-title" class="text-xs font-extrabold uppercase tracking-wider text-indigo-600 mt-1">StockTransfer ERP</p>
+                <p id="login-software-title" class="text-xs font-extrabold uppercase tracking-wider text-indigo-600 mt-1">Stock Transfer &amp; Supply Chain Portal</p>
                 <p id="login-company-info" class="text-xs text-slate-500 mt-1.5 leading-relaxed"></p>
             </div>
 
@@ -162,21 +162,14 @@
                 </button>
             </form>
 
-            <div class="mt-4">
-                <button type="button" onclick="quickEnterDemoPortal()" class="w-full py-2.5 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5">
-                    <i data-lucide="zap" class="w-3.5 h-3.5 text-emerald-600"></i>
-                    <span>Quick Preview Demo Access (Administrator)</span>
-                </button>
-            </div>
-
-            <div class="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+            <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
                 <span class="flex items-center gap-1"><i data-lucide="lock" class="w-3 h-3 text-emerald-500"></i> Encrypted Session</span>
                 <span id="login-footer-contact">Authorized Personnel Only</span>
             </div>
         </div>
     </div>
 
-    <!-- ==================== MAIN APPLICATION SHELL (TOP NAVIGATION) ==================== -->
+    <!-- ==================== MAIN APPLICATION SHELL (HIDDEN UNTIL AUTHENTICATED) ==================== -->
     <div id="app-view" class="hidden min-h-screen flex flex-col">
 
         <!-- Top Navigation Bar & Live System Clock -->
@@ -264,12 +257,12 @@
 
         let firebaseApp = null;
         let analytics = null;
-        let auth = null;
+        let firebaseAuth = null;
         let firestoreDb = null;
 
         try {
             firebaseApp = initializeApp(firebaseConfig);
-            auth = getAuth(firebaseApp);
+            firebaseAuth = getAuth(firebaseApp);
             firestoreDb = getFirestore(firebaseApp);
             try {
                 analytics = getAnalytics(firebaseApp);
@@ -281,12 +274,20 @@
         }
 
         async function ensureFirebaseAuth() {
-            if (!auth) return;
+            if (!firebaseAuth) return;
             try {
-                await signInAnonymously(auth);
+                await signInAnonymously(firebaseAuth);
             } catch (e) {
-                // Sandboxed preview or offline fallback
+                // Offline or sandbox fallback
             }
+        }
+
+        function refreshIconsSafe() {
+            try {
+                if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                    window.lucide.createIcons();
+                }
+            } catch (e) {}
         }
 
         window.escapeHtml = function(str) {
@@ -309,7 +310,7 @@
 
         async function hashPassword(plainText) {
             try {
-                if (window.crypto && window.crypto.subtle) {
+                if (window.crypto && window.crypto.subtle && typeof TextEncoder !== 'undefined') {
                     const encoder = new TextEncoder();
                     const data = encoder.encode(String(plainText) + '_KTY_SALT_2026');
                     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -317,7 +318,7 @@
                     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
                 }
             } catch (e) {}
-            return 'plain_' + String(plainText);
+            return 'fallback_sha256_' + String(plainText);
         }
 
         function getLocalToday() {
@@ -454,7 +455,7 @@
             return true;
         }
 
-        // Helper excluding "Daily Bread Orders" and "Warehouse Orders" from production modules
+        // Exclude "Daily Bread Orders" and "Warehouse Orders" from production modules
         function isExcludedProductionCategory(catOrName) {
             const rawName = typeof catOrName === 'string'
                 ? catOrName
@@ -506,7 +507,7 @@
             productionEntries: {}
         };
 
-        const STORAGE_KEY = 'kty_store_order_secure_v15';
+        const STORAGE_KEY = 'kty_store_order_secure_v16';
         let state = JSON.parse(JSON.stringify(CLEAN_DEFAULT_DATA));
 
         async function ensureDefaultAdmin() {
@@ -624,7 +625,7 @@
                     renderCurrentRoute();
                 }
             } catch (err) {
-                console.warn('Firestore sync skipped in preview:', err.message);
+                console.warn('Firestore sync warning:', err.message);
             }
         }
 
@@ -678,7 +679,7 @@
             const loginContact = document.getElementById('login-footer-contact');
 
             if (loginName) loginName.textContent = s.companyName || 'Enterprise Food & Supply Co.';
-            if (loginSoft) loginSoft.textContent = s.softwareName || 'StockTransfer ERP';
+            if (loginSoft) loginSoft.textContent = s.softwareName || 'Stock Transfer & Supply Chain Portal';
             if (loginInfo) {
                 const infoParts = [s.tagline, s.address].filter(Boolean);
                 loginInfo.textContent = infoParts.join(' • ');
@@ -714,7 +715,7 @@
                     topLogoBox.innerHTML = `<i data-lucide="boxes" class="w-5 h-5"></i>`;
                 }
             }
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.clearCollection = async function(colName) {
@@ -764,7 +765,7 @@
             document.getElementById('modal-confirm-btn').textContent = confirmText;
             window.activeModalConfirm = onConfirm;
             modal.classList.remove('hidden');
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.closeModal = function() {
@@ -782,17 +783,13 @@
 
         // ==================== SESSION, CLOCK & TOP NAVIGATION ====================
         let currentUser = null;
-        let currentRoute = null; // Starts null on initial load -> Home screen with centered logo & collapsed menus
+        let currentRoute = null;
         let failedAttempts = 0;
         let lockoutUntil = 0;
         let inactivityTimer = null;
         let liveClockInterval = null;
 
-        let expandedGroups = {
-            'order-transaction': false,
-            'production': false,
-            'app-settings': false
-        };
+        let openMenuGroup = null;
 
         function formatLiveSystemDateTime() {
             const now = new Date();
@@ -812,7 +809,8 @@
             liveClockInterval = setInterval(updateEl, 1000);
         }
 
-        const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
+        // 15 minutes inactivity timeout
+        const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
 
         function resetInactivityTimer() {
             if (!currentUser) return;
@@ -824,7 +822,7 @@
             clearTimeout(inactivityTimer);
             inactivityTimer = setTimeout(() => {
                 logout();
-                showToast('Session logged out due to inactivity.', 'warning');
+                showToast('Session logged out due to 15 minutes of inactivity.', 'warning');
             }, INACTIVITY_TIMEOUT_MS);
         }
 
@@ -847,21 +845,44 @@
             if (hdrRoleEl) hdrRoleEl.textContent = `${user.fullName} (${rolesLabel})`;
         }
 
+        function showLoginScreen() {
+            currentUser = null;
+            currentRoute = null;
+            openMenuGroup = null;
+            clearTimeout(inactivityTimer);
+            if (liveClockInterval) {
+                clearInterval(liveClockInterval);
+                liveClockInterval = null;
+            }
+            try {
+                sessionStorage.removeItem('kty_active_user');
+                sessionStorage.removeItem('kty_session_expiry');
+            } catch (e) {}
+
+            const uInput = document.getElementById('login-username');
+            const pInput = document.getElementById('login-password');
+            if (uInput) uInput.value = '';
+            if (pInput) pInput.value = '';
+
+            const appView = document.getElementById('app-view');
+            const loginView = document.getElementById('login-view');
+            if (appView) appView.classList.add('hidden');
+            if (loginView) loginView.classList.remove('hidden');
+            refreshIconsSafe();
+        }
+
         function activateAuthenticatedUser(userRecord) {
             failedAttempts = 0;
             currentUser = {
                 ...userRecord,
                 roles: getUserRolesList(userRecord)
             };
+            openMenuGroup = null;
+            currentRoute = null;
 
             try {
                 sessionStorage.setItem('kty_active_user', JSON.stringify(currentUser));
             } catch (e) {}
-
-            Object.keys(expandedGroups).forEach(k => {
-                expandedGroups[k] = false;
-            });
-            currentRoute = null; // Keep home screen with centered logo & collapsed menus on load
 
             const loginView = document.getElementById('login-view');
             const appView = document.getElementById('app-view');
@@ -875,21 +896,7 @@
             renderCurrentRoute();
         }
 
-        window.quickEnterDemoPortal = function() {
-            const adminUser = (state.users && state.users.find(u => u.username === 'admin')) || {
-                id: 'USR-01',
-                username: 'admin',
-                fullName: 'System Administrator',
-                role: 'admin',
-                roles: ['admin'],
-                branchId: '',
-                destinationId: '',
-                permissions: buildDefaultPermissionsForRoles(['admin'])
-            };
-            activateAuthenticatedUser(adminUser);
-            showToast(`Entered portal as ${adminUser.fullName}`, 'success');
-        };
-
+        // Always require credential sign-in on load unless an unexpired session exists in current tab
         function checkExistingSession() {
             try {
                 const savedUser = sessionStorage.getItem('kty_active_user');
@@ -904,13 +911,7 @@
                 }
             } catch (e) {}
 
-            // Auto-enter clean preview session so sandboxed iframe preview never gets blocked
-            const adminUser = state.users && state.users.find(u => u.username === 'admin');
-            if (adminUser) {
-                activateAuthenticatedUser(adminUser);
-            } else {
-                logout();
-            }
+            showLoginScreen();
         }
 
         const loginForm = document.getElementById('login-form');
@@ -941,7 +942,8 @@
                 const matchedUser = (state.users || []).find(u => {
                     if (String(u.username || '').toLowerCase() !== uname) return false;
                     if (u.passwordHash) return u.passwordHash === inputHash;
-                    return u.password === pwd;
+                    if (u.password !== undefined) return u.password === pwd;
+                    return false;
                 });
 
                 if (!matchedUser) {
@@ -956,6 +958,7 @@
                     if (errBox) errBox.classList.remove('hidden');
                     const passInput = document.getElementById('login-password');
                     if (passInput) passInput.value = '';
+                    refreshIconsSafe();
                     return;
                 }
 
@@ -970,28 +973,7 @@
         }
 
         window.logout = function() {
-            currentUser = null;
-            currentRoute = null;
-            clearTimeout(inactivityTimer);
-            if (liveClockInterval) {
-                clearInterval(liveClockInterval);
-                liveClockInterval = null;
-            }
-            try {
-                sessionStorage.removeItem('kty_active_user');
-                sessionStorage.removeItem('kty_session_expiry');
-            } catch (e) {}
-
-            const uInput = document.getElementById('login-username');
-            const pInput = document.getElementById('login-password');
-            if (uInput) uInput.value = '';
-            if (pInput) pInput.value = '';
-
-            const appView = document.getElementById('app-view');
-            const loginView = document.getElementById('login-view');
-            if (appView) appView.classList.add('hidden');
-            if (loginView) loginView.classList.remove('hidden');
-            try { lucide.createIcons(); } catch (e) {}
+            showLoginScreen();
         };
 
         function getMenuGroups() {
@@ -1011,21 +993,14 @@
         }
 
         window.toggleTopMenuGroup = function(groupId) {
-            const nextState = !Boolean(expandedGroups[groupId]);
-            Object.keys(expandedGroups).forEach(k => {
-                expandedGroups[k] = false;
-            });
-            expandedGroups[groupId] = nextState;
+            openMenuGroup = (openMenuGroup === groupId) ? null : groupId;
             renderTopMenu();
         };
 
         document.addEventListener('click', (e) => {
             if (!e.target.closest('[data-menu-group]')) {
-                const anyOpen = Object.values(expandedGroups).some(Boolean);
-                if (anyOpen) {
-                    Object.keys(expandedGroups).forEach(k => {
-                        expandedGroups[k] = false;
-                    });
+                if (openMenuGroup !== null) {
+                    openMenuGroup = null;
                     renderTopMenu();
                 }
             }
@@ -1058,7 +1033,7 @@
             };
 
             nav.innerHTML = groups.map(group => {
-                const isOpen = Boolean(expandedGroups[group.id]);
+                const isOpen = openMenuGroup === group.id;
                 const hasActiveChild = group.children.some(c => c.id === currentRoute);
                 const theme = groupColorThemes[group.id] || groupColorThemes['order-transaction'];
                 const btnStyle = hasActiveChild ? theme.active : (isOpen ? theme.open : theme.idle);
@@ -1084,13 +1059,15 @@
                     </div>
                 `;
             }).join('');
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         }
 
         window.navigateTo = function(routeId) {
-            Object.keys(expandedGroups).forEach(k => {
-                expandedGroups[k] = false;
-            });
+            openMenuGroup = null;
+            if (!currentUser) {
+                showLoginScreen();
+                return;
+            }
             if (routeId === 'home' || !routeId) {
                 currentRoute = null;
                 renderTopMenu();
@@ -1334,6 +1311,10 @@
         }
 
         function renderCurrentRoute() {
+            if (!currentUser) {
+                showLoginScreen();
+                return;
+            }
             const container = document.getElementById('main-content');
             if (!container) return;
 
@@ -1344,7 +1325,7 @@
                 if (titleEl) titleEl.textContent = `${s.softwareName || 'StockTransfer ERP'} • Home Overview`;
                 if (subEl) subEl.textContent = 'Live branch order request notifications, quick launch & system overview';
                 renderHomeDashboardView(container);
-                try { lucide.createIcons(); } catch (e) {}
+                refreshIconsSafe();
                 return;
             }
 
@@ -1377,7 +1358,7 @@
             else if (currentRoute === 'master-users') renderMasterUsersView(container);
             else if (currentRoute === 'system-settings') renderSystemSettingsView(container);
 
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         }
 
         function isItemActive(item) {
@@ -1586,13 +1567,13 @@
             if (cEl) cEl.onchange = e => {
                 orderFormState.catIdx = parseInt(e.target.value, 10) || 0;
                 renderOrderFormView(container);
-                try { lucide.createIcons(); } catch (err) {}
+                refreshIconsSafe();
             };
             if (sEl) {
                 sEl.addEventListener('input', e => {
                     orderFormState.searchQuery = e.target.value;
                     renderOrderFormView(container);
-                    try { lucide.createIcons(); } catch (err) {}
+                    refreshIconsSafe();
                     const nextSearch = document.getElementById('f-item-search');
                     if (nextSearch) {
                         nextSearch.focus();
@@ -1608,7 +1589,7 @@
             if (checked) orderFormState.selectedItems[itemId] = true;
             else delete orderFormState.selectedItems[itemId];
             renderOrderFormView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.toggleCategoryOrderSelection = function(checked) {
@@ -1631,13 +1612,13 @@
                 else delete orderFormState.selectedItems[it.id];
             });
             renderOrderFormView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.clearOrderSearch = function() {
             orderFormState.searchQuery = '';
             renderOrderFormView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.activateOrderForm = function() {
@@ -1645,7 +1626,7 @@
             orderFormState.isActive = true;
             orderFormState.requestDate = getLocalToday();
             renderOrderFormView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
             showToast('Form activated for new entry!', 'success');
         };
 
@@ -1655,7 +1636,7 @@
             orderFormState.selectedItems = {};
             orderFormState.searchQuery = '';
             renderOrderFormView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
             showToast('Order entry cancelled and locked.', 'info');
         };
 
@@ -1673,7 +1654,7 @@
         window.changeCat = function(dir) {
             orderFormState.catIdx = Math.max(0, Math.min((state.categories || []).length - 1, orderFormState.catIdx + dir));
             renderOrderFormView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.saveOrderForm = async function() {
@@ -1828,7 +1809,7 @@
                 datePicker.onchange = e => {
                     historyFilterDate = e.target.value || getLocalToday();
                     renderBranchHistoryView(container);
-                    try { lucide.createIcons(); } catch (err) {}
+                    refreshIconsSafe();
                 };
             }
         }
@@ -1837,13 +1818,13 @@
             historyShowAllDates = false;
             historyFilterDate = getLocalToday();
             renderBranchHistoryView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.toggleHistoryAllDates = function(showAll) {
             historyShowAllDates = Boolean(showAll);
             renderBranchHistoryView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.viewOrderDetails = function(orderId) {
@@ -2035,14 +2016,14 @@
                 mDateEl.onchange = e => {
                     matrixFilterDate = e.target.value;
                     renderOrderMatrixView(container);
-                    try { lucide.createIcons(); } catch (err) {}
+                    refreshIconsSafe();
                 };
             }
             if (mCatEl) {
                 mCatEl.onchange = e => {
                     matrixFilterCatId = e.target.value;
                     renderOrderMatrixView(container);
-                    try { lucide.createIcons(); } catch (err) {}
+                    refreshIconsSafe();
                 };
             }
         }
@@ -2364,7 +2345,7 @@
                 chDateEl.onchange = e => {
                     challanDate = e.target.value;
                     renderDeliveryChallanView(container);
-                    try { lucide.createIcons(); } catch (err) {}
+                    refreshIconsSafe();
                 };
             }
         }
@@ -2378,13 +2359,13 @@
                 challanSelectedBranchIds = challanSelectedBranchIds.filter(id => id !== branchId);
             }
             renderDeliveryChallanView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.toggleAllChallanBranches = function(selectAll) {
             challanSelectedBranchIds = selectAll ? (state.branches || []).map(b => b.id) : [];
             renderDeliveryChallanView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.printChallansOneAfterAnother = function() {
@@ -2454,7 +2435,7 @@
         }
 
         function renderProductionSheetCharts(ym, daysInMonth, visibleItems, daySums) {
-            if (!window.Chart) return;
+            if (typeof window.Chart === 'undefined') return;
             const dailyCanvas = document.getElementById('prod-daily-trend-chart');
             const topCanvas = document.getElementById('prod-top-items-chart');
             if (!dailyCanvas || !topCanvas) return;
@@ -2465,7 +2446,7 @@
             const dailySeries = Array.from({ length: daysInMonth }, (_, i) => daySums[i + 1] || 0);
 
             try {
-                prodDailyChartInstance = new Chart(dailyCanvas.getContext('2d'), {
+                prodDailyChartInstance = new window.Chart(dailyCanvas.getContext('2d'), {
                     type: 'bar',
                     data: {
                         labels,
@@ -2520,7 +2501,7 @@
             const palette = ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6'];
 
             try {
-                prodTopItemsChartInstance = new Chart(topCanvas.getContext('2d'), {
+                prodTopItemsChartInstance = new window.Chart(topCanvas.getContext('2d'), {
                     type: 'doughnut',
                     data: {
                         labels: pieLabels,
@@ -2868,7 +2849,7 @@
                         prodSheetSelectedDate = `${nextYm}-01`;
                     }
                     renderProductionSheetView(container);
-                    try { lucide.createIcons(); } catch (err) {}
+                    refreshIconsSafe();
                 };
             }
             if (calInput) {
@@ -2879,14 +2860,14 @@
                         prodSheetYearMonth = picked.slice(0, 7);
                     }
                     renderProductionSheetView(container);
-                    try { lucide.createIcons(); } catch (err) {}
+                    refreshIconsSafe();
                 };
             }
             if (catSelect) {
                 catSelect.onchange = e => {
                     prodSheetCatId = e.target.value;
                     renderProductionSheetView(container);
-                    try { lucide.createIcons(); } catch (err) {}
+                    refreshIconsSafe();
                 };
             }
             if (searchInput) {
@@ -2895,7 +2876,7 @@
                         e.preventDefault();
                         prodSheetSearch = searchInput.value;
                         renderProductionSheetView(container);
-                        try { lucide.createIcons(); } catch (err) {}
+                        refreshIconsSafe();
                     }
                 });
             }
@@ -2907,13 +2888,13 @@
             const inp = document.getElementById('prod-sheet-search-input');
             prodSheetSearch = inp ? inp.value : '';
             renderProductionSheetView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.clearProductionSheetSearch = function() {
             prodSheetSearch = '';
             renderProductionSheetView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.startProductionCellEdit = function(td) {
@@ -3196,43 +3177,11 @@
         };
 
         // ==================== 6. PRODUCTION REPORTS (FROM/TO DATES, DAY 1..31, SELECTED-DATE AVERAGE) ====================
-        let reportPeriodMode = 'monthly'; // 'monthly' | 'quarterly' | 'yearly'
         let reportFromDate = `${TODAY.slice(0, 7)}-01`;
         let reportToDate = `${TODAY.slice(0, 7)}-${String(getDaysInYearMonth(TODAY.slice(0, 7))).padStart(2, '0')}`;
         let reportCatId = 'ALL';
         let reportSearchQuery = '';
         let prodReportChartInstance = null;
-
-        function getQuarterDateRange(year, qNum) {
-            const startMonth = (qNum - 1) * 3 + 1;
-            const endMonth = startMonth + 2;
-            const startStr = `${year}-${String(startMonth).padStart(2, '0')}-01`;
-            const lastDay = new Date(year, endMonth, 0).getDate();
-            const endStr = `${year}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-            return { from: startStr, to: endStr };
-        }
-
-        function setReportPeriodPreset(mode) {
-            reportPeriodMode = mode;
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = now.getMonth() + 1;
-
-            if (mode === 'monthly') {
-                const ym = `${year}-${String(month).padStart(2, '0')}`;
-                const lastDay = getDaysInYearMonth(ym);
-                reportFromDate = `${ym}-01`;
-                reportToDate = `${ym}-${String(lastDay).padStart(2, '0')}`;
-            } else if (mode === 'quarterly') {
-                const qNum = Math.floor((month - 1) / 3) + 1;
-                const rng = getQuarterDateRange(year, qNum);
-                reportFromDate = rng.from;
-                reportToDate = rng.to;
-            } else if (mode === 'yearly') {
-                reportFromDate = `${year}-01-01`;
-                reportToDate = `${year}-12-31`;
-            }
-        }
 
         function enumerateDatesInRange(fromStr, toStr) {
             if (!fromStr || !toStr) return [];
@@ -3332,7 +3281,7 @@
         }
 
         function renderProductionReportChart(ds) {
-            if (!window.Chart) return;
+            if (typeof window.Chart === 'undefined') return;
             const canvas = document.getElementById('prod-report-chart');
             if (!canvas) return;
 
@@ -3347,7 +3296,7 @@
             const avgLineSeries = Array.from({ length: 31 }, () => Number(avgPerDaySlot.toFixed(2)));
 
             try {
-                prodReportChartInstance = new Chart(canvas.getContext('2d'), {
+                prodReportChartInstance = new window.Chart(canvas.getContext('2d'), {
                     type: 'bar',
                     data: {
                         labels,
@@ -3396,22 +3345,15 @@
 
             container.innerHTML = `
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
-                    <!-- Header & Period Mode Tabs -->
+                    <!-- Header -->
                     <div class="rounded-2xl bg-gradient-to-r from-indigo-950 via-purple-950 to-slate-900 text-white p-5 flex flex-wrap items-center justify-between gap-4">
                         <div>
                             <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-400/20 border border-purple-300/30 text-[11px] font-extrabold uppercase tracking-wider text-purple-200">
                                 <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 text-purple-300"></i>
                                 <span>Day 1–31 &amp; Selected Date Range Analytics</span>
                             </div>
-                            <h3 class="text-lg md:text-xl font-extrabold mt-1">Production Reports (${escapeHtml(reportPeriodMode.toUpperCase())})</h3>
-                            <p class="text-xs text-indigo-200/80">Averages are computed strictly across the selected date range (${ds.selectedDaysCount} day${ds.selectedDaysCount === 1 ? '' : 's'}). Excludes Daily Bread &amp; Warehouse Orders.</p>
-                        </div>
-
-                        <div class="flex flex-wrap items-center gap-1.5 bg-white/10 p-1 rounded-xl border border-white/15">
-                            ${['monthly', 'quarterly', 'yearly'].map(mode => {
-                                const active = reportPeriodMode === mode;
-                                return `<button type="button" onclick="selectProductionReportPeriod('${mode}')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold uppercase transition ${active ? 'bg-white text-indigo-950 shadow-sm' : 'text-indigo-100 hover:bg-white/10'}">${mode}</button>`;
-                            }).join('')}
+                            <h3 class="text-lg md:text-xl font-extrabold mt-1">Production Reports</h3>
+                            <p class="text-xs text-indigo-200/80">Averages are calculated strictly across the selected date range (${ds.selectedDaysCount} day${ds.selectedDaysCount === 1 ? '' : 's'}). Excludes Daily Bread &amp; Warehouse Orders.</p>
                         </div>
                     </div>
 
@@ -3468,7 +3410,7 @@
                         </div>
                     </div>
 
-                    <!-- Colorful KPI Cards -->
+                    <!-- Colorful KPI Cards (Selected Date Range Only) -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                         <div class="rounded-2xl p-4 bg-gradient-to-br from-indigo-600 to-blue-600 text-white shadow-sm">
                             <div class="text-[11px] font-extrabold uppercase tracking-wider text-indigo-100">Selected Range Total</div>
@@ -3570,7 +3512,7 @@
                 repCatEl.onchange = e => {
                     reportCatId = e.target.value;
                     renderProductionReportsView(container);
-                    try { lucide.createIcons(); } catch (err) {}
+                    refreshIconsSafe();
                 };
             }
             if (repSearchEl) {
@@ -3579,7 +3521,7 @@
                         e.preventDefault();
                         reportSearchQuery = repSearchEl.value;
                         renderProductionReportsView(container);
-                        try { lucide.createIcons(); } catch (err) {}
+                        refreshIconsSafe();
                     }
                 });
             }
@@ -3587,19 +3529,13 @@
             renderProductionReportChart(ds);
         }
 
-        window.selectProductionReportPeriod = function(mode) {
-            setReportPeriodPreset(mode);
-            renderProductionReportsView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
-        };
-
         window.showProductionReportByDateRange = function() {
             const fromEl = document.getElementById('rep-from-date');
             const toEl = document.getElementById('rep-to-date');
             if (fromEl && fromEl.value) reportFromDate = fromEl.value;
             if (toEl && toEl.value) reportToDate = toEl.value;
             renderProductionReportsView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
             showToast(`Showing report from ${reportFromDate} to ${reportToDate}`, 'info');
         };
 
@@ -3607,13 +3543,13 @@
             const inp = document.getElementById('rep-search-input');
             reportSearchQuery = inp ? inp.value : '';
             renderProductionReportsView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.clearProductionReportSearch = function() {
             reportSearchQuery = '';
             renderProductionReportsView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.exportProductionReportExcel = function() {
@@ -3882,7 +3818,7 @@
             itemMasterFilterCatId = newCatId;
             importCompletedForCategory = false;
             renderMasterItemsView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
             const selectedCat = (state.categories || []).find(c => c.id === newCatId);
             showToast(`Switched to category: ${selectedCat ? selectedCat.name : ''}.`, 'info');
         };
@@ -3890,7 +3826,7 @@
         window.onItemStatusFilterChange = function(newStatus) {
             itemMasterStatusFilter = newStatus;
             renderMasterItemsView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
         };
 
         window.refreshItemMasterView = function() {
@@ -3900,7 +3836,7 @@
                 itemMasterFilterCatId = state.categories[0].id;
             }
             renderMasterItemsView(document.getElementById('main-content'));
-            try { lucide.createIcons(); } catch (e) {}
+            refreshIconsSafe();
             showToast('Item Master view refreshed!', 'info');
         };
 
@@ -4436,43 +4372,56 @@
                 : { id: 'USR-' + Date.now(), username: '', passwordHash: '', fullName: '', role: 'branch', roles: ['branch'], branchId: '', destinationId: '', permissions: buildDefaultPermissionsForRoles(['branch']) };
 
             openModal({
-                title: id ? 'Edit User Account & Permissions' : 'Create User Account & Permissions',
-                confirmText: 'Save User',
+                title: id ? 'Edit User & Permissions' : 'Add New User',
                 bodyHtml: `
                     <div class="space-y-4">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="grid grid-cols-2 gap-3">
                             <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Username</label><input type="text" id="m-u-name" value="${escapeHtml(user.username)}" ${user.username === 'admin' ? 'readonly' : ''} class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
-                            <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">${id ? 'New Password (leave blank to keep)' : 'Password'}</label><input type="password" id="m-u-pass" placeholder="${id ? '••••••••' : 'Enter password'}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Full Name</label><input type="text" id="m-u-full" value="${escapeHtml(user.fullName)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">${id ? 'New Password (leave blank to keep current)' : 'Password'}</label>
+                            <input type="password" id="m-u-pass" placeholder="${id ? '••••••••' : 'Enter password'}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="block text-xs font-bold uppercase text-slate-500">Assigned Roles (Multiple Allowed)</label>
+                                <button type="button" onclick="applyRolePresetPermissions()" class="text-xs font-bold text-blue-600 hover:underline">Apply Role Defaults Below</button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                                ${ROLE_CATALOG.map(rc => {
+                                    const checked = (user.roles || []).includes(rc.id);
+                                    const lockAdmin = user.username === 'admin' && rc.id === 'admin';
+                                    return `
+                                        <label class="inline-flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                                            <input type="checkbox" value="${rc.id}" ${checked ? 'checked' : ''} ${lockAdmin ? 'checked disabled' : ''} class="m-u-role-cb rounded text-blue-600 w-4 h-4">
+                                            <span>${escapeHtml(rc.label)}</span>
+                                        </label>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Assigned Roles (Multi-Select)</label>
-                                <div class="grid grid-cols-2 gap-1.5 p-2 bg-slate-50 border rounded-xl">
-                                    ${ROLE_CATALOG.map(rc => {
-                                        const isChecked = (user.roles || []).includes(rc.id);
-                                        const lockedAdmin = user.username === 'admin' && rc.id === 'admin';
-                                        return `
-                                            <label class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer">
-                                                <input type="checkbox" value="${rc.id}" ${isChecked ? 'checked' : ''} ${lockedAdmin ? 'checked disabled' : ''} class="m-u-role-cb rounded text-blue-600 w-3.5 h-3.5">
-                                                <span>${escapeHtml(rc.label)}</span>
-                                            </label>
-                                        `;
-                                    }).join('')}
-                                </div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Assigned Branch (for Branch role)</label>
+                                <select id="m-u-branch" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                                    <option value="">None</option>
+                                    ${(state.branches || []).map(b => `<option value="${b.id}" ${b.id === user.branchId ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Assigned Destination (for Warehouse role)</label>
+                                <select id="m-u-dest" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                                    <option value="">None</option>
+                                    ${(state.destinations || []).map(d => `<option value="${d.id}" ${d.id === user.destinationId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
+                                </select>
                             </div>
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Branch (if Branch User)</label><select id="m-u-br" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"><option value="">None</option>${(state.branches || []).map(b => `<option value="${b.id}" ${b.id === user.branchId ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}</select></div>
-                            <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Destination (if Warehouse User)</label><select id="m-u-dst" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"><option value="">None</option>${(state.destinations || []).map(d => `<option value="${d.id}" ${d.id === user.destinationId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}</select></div>
-                        </div>
-                        <div class="space-y-2 pt-2 border-t border-slate-200">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <label class="block text-xs font-extrabold uppercase text-slate-700">Document View &amp; Edit Permissions</label>
-                                <button type="button" onclick="applyRolePresetPermissions()" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[11px] font-bold">
-                                    Reset to Selected Role Defaults
-                                </button>
-                            </div>
+
+                        <div class="space-y-2">
+                            <label class="block text-xs font-bold uppercase text-slate-500">Per-Document Permissions (View &amp; Edit / Save)</label>
                             <div class="space-y-2.5 max-h-64 overflow-y-auto pr-1">
                                 ${renderPermissionMatrixHtml(user)}
                             </div>
@@ -4480,347 +4429,278 @@
                     </div>
                 `,
                 onConfirm: async () => {
-                    const uname = (document.getElementById('m-u-name')?.value || '').trim().toLowerCase();
+                    user.username = (document.getElementById('m-u-name')?.value || '').trim().toLowerCase();
+                    user.fullName = (document.getElementById('m-u-full')?.value || '').trim();
                     const rawPass = document.getElementById('m-u-pass')?.value || '';
-                    const fullName = (document.getElementById('m-u-full')?.value || '').trim();
 
-                    const checkedRoles = Array.from(document.querySelectorAll('.m-u-role-cb:checked')).map(cb => cb.value);
-                    if (user.username === 'admin' && !checkedRoles.includes('admin')) {
-                        checkedRoles.unshift('admin');
+                    const selectedRoles = Array.from(document.querySelectorAll('.m-u-role-cb:checked')).map(cb => cb.value);
+                    if (user.username === 'admin' && !selectedRoles.includes('admin')) {
+                        selectedRoles.unshift('admin');
                     }
-                    const rolesList = checkedRoles.length > 0 ? Array.from(new Set(checkedRoles)) : ['branch'];
+                    user.roles = selectedRoles.length > 0 ? Array.from(new Set(selectedRoles)) : ['branch'];
+                    user.role = user.roles[0];
 
-                    const brId = document.getElementById('m-u-br')?.value || '';
-                    const dstId = document.getElementById('m-u-dst')?.value || '';
-
-                    if (!uname || !fullName) return showToast('Username and Full Name are required!', 'error');
-                    if (!id && !rawPass) return showToast('Password is required for a new user!', 'error');
-
-                    const duplicate = (state.users || []).find(u => u.username.toLowerCase() === uname && u.id !== user.id);
-                    if (duplicate) return showToast('Username already exists!', 'error');
-
-                    user.username = uname;
-                    user.fullName = fullName;
-                    user.roles = rolesList;
-                    user.role = rolesList.includes('admin') ? 'admin' : rolesList[0];
-                    user.branchId = brId;
-                    user.destinationId = dstId;
+                    user.branchId = document.getElementById('m-u-branch')?.value || '';
+                    user.destinationId = document.getElementById('m-u-dest')?.value || '';
                     user.permissions = collectPermissionsFromModal();
 
+                    if (!user.username || !user.fullName) return showToast('Username and Full Name are required!', 'error');
                     if (rawPass) {
                         user.passwordHash = await hashPassword(rawPass);
                         delete user.password;
+                    } else if (!user.passwordHash) {
+                        return showToast('Password is required for a new user!', 'error');
                     }
 
                     await dbSaveRecord('users', user);
+                    closeModal();
 
-                    if (currentUser && (currentUser.id === user.id || currentUser.username === user.username)) {
-                        currentUser = {
-                            ...currentUser,
-                            fullName: user.fullName,
-                            role: user.role,
-                            roles: user.roles,
-                            branchId: user.branchId,
-                            destinationId: user.destinationId,
-                            permissions: user.permissions
-                        };
-                        try {
-                            sessionStorage.setItem('kty_active_user', JSON.stringify(currentUser));
-                        } catch (e) {}
+                    if (currentUser && currentUser.id === user.id) {
+                        currentUser = { ...user, roles: getUserRolesList(user) };
+                        try { sessionStorage.setItem('kty_active_user', JSON.stringify(currentUser)); } catch (e) {}
                         updateHeaderUserDisplay(currentUser);
                         renderTopMenu();
                     }
 
-                    closeModal();
                     renderCurrentRoute();
-                    showToast('User account & permissions saved successfully!');
+                    showToast('User roles & document permissions saved!');
                 }
             });
         };
 
-        // ==================== 10. COMPANY & SYSTEM INFORMATION ====================
-        let tempLogoDataUrl = null;
-
+        // ==================== 10. COMPANY & SYSTEM SETTINGS ====================
         function renderSystemSettingsView(container) {
             const canEdit = canEditScreen('system-settings');
             const s = state.settings || DEFAULT_SETTINGS;
-            if (tempLogoDataUrl === null) tempLogoDataUrl = s.logoDataUrl || '';
 
             container.innerHTML = `
                 <div class="max-w-4xl mx-auto bg-white rounded-2xl p-6 shadow-sm border space-y-6">
-                    <div class="pb-3 border-b">
-                        <h3 class="font-bold text-lg text-slate-900">Company &amp; System Information</h3>
-                        <p class="text-xs text-slate-500">Customize the software name, company name, logo, and print header details</p>
+                    <div class="border-b pb-4">
+                        <h3 class="text-lg font-bold text-slate-900">Company &amp; System Information</h3>
+                        <p class="text-xs text-slate-500">Configure software title, company identity, contact details, tax ID, and logo used on the login screen, top bar, and delivery challans.</p>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Software Name</label>
-                            <input type="text" id="set-soft-name" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.softwareName || '')}" class="w-full px-3.5 py-2 border rounded-xl text-sm font-bold">
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                        <div class="bg-slate-50 p-4 rounded-2xl border text-center space-y-3">
+                            <div class="w-28 h-28 mx-auto bg-white border border-slate-200 rounded-2xl flex items-center justify-center overflow-hidden p-2 shadow-xs">
+                                ${s.logoDataUrl
+                                    ? `<img id="preview-logo-img" src="${s.logoDataUrl}" class="max-w-full max-h-full object-contain">`
+                                    : `<i id="preview-logo-placeholder" data-lucide="building-2" class="w-10 h-10 text-slate-300"></i>`
+                                }
+                            </div>
+                            <label class="inline-flex items-center justify-center gap-1.5 px-4 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'} font-semibold rounded-xl text-xs transition w-full">
+                                <i data-lucide="upload" class="w-3.5 h-3.5"></i> Upload Logo
+                                <input type="file" accept="image/*" ${!canEdit ? 'disabled' : ''} class="hidden" onchange="handleLogoUpload(event)">
+                            </label>
+                            ${s.logoDataUrl && canEdit ? `
+                                <button type="button" onclick="removeCompanyLogo()" class="text-xs font-bold text-rose-600 hover:underline w-full">Remove Logo</button>
+                            ` : ''}
                         </div>
-                        <div>
-                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Company Name</label>
-                            <input type="text" id="set-comp-name" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.companyName || '')}" class="w-full px-3.5 py-2 border rounded-xl text-sm font-bold">
+
+                        <div class="md:col-span-2 space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Software Title</label>
+                                    <input type="text" id="set-software" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.softwareName || '')}" class="w-full px-3.5 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Company Name</label>
+                                    <input type="text" id="set-company" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.companyName || '')}" class="w-full px-3.5 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tagline / Subtitle</label>
+                                <input type="text" id="set-tagline" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.tagline || '')}" class="w-full px-3.5 py-2 bg-slate-50 border rounded-xl text-sm font-semibold">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Address</label>
+                                <input type="text" id="set-address" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.address || '')}" class="w-full px-3.5 py-2 bg-slate-50 border rounded-xl text-sm font-semibold">
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Phone</label>
+                                    <input type="text" id="set-phone" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.phone || '')}" class="w-full px-3.5 py-2 bg-slate-50 border rounded-xl text-sm font-semibold">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Email</label>
+                                    <input type="email" id="set-email" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.email || '')}" class="w-full px-3.5 py-2 bg-slate-50 border rounded-xl text-sm font-semibold">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">CR / VAT ID</label>
+                                    <input type="text" id="set-tax" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.taxId || '')}" class="w-full px-3.5 py-2 bg-slate-50 border rounded-xl text-sm font-semibold">
+                                </div>
+                            </div>
+                            <div class="pt-2 flex justify-end">
+                                <button type="button" onclick="saveCompanySettings()" ${!canEdit ? 'disabled' : ''} class="px-6 py-2.5 ${!canEdit ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md'} font-bold rounded-xl text-sm flex items-center gap-2 transition">
+                                    <i data-lucide="save" class="w-4 h-4"></i> Save Company Settings
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tagline / Subtitle</label>
-                        <input type="text" id="set-tagline" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.tagline || '')}" class="w-full px-3.5 py-2 border rounded-xl text-sm font-bold">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Company Address</label>
-                        <input type="text" id="set-addr" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.address || '')}" class="w-full px-3.5 py-2 border rounded-xl text-sm font-bold">
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Phone</label><input type="text" id="set-phone" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.phone || '')}" class="w-full px-3.5 py-2 border rounded-xl text-sm font-bold"></div>
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Email</label><input type="text" id="set-email" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.email || '')}" class="w-full px-3.5 py-2 border rounded-xl text-sm font-bold"></div>
-                        <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tax ID / VAT</label><input type="text" id="set-tax" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.taxId || '')}" class="w-full px-3.5 py-2 border rounded-xl text-sm font-bold"></div>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-6 p-4 bg-slate-50 rounded-xl border">
-                        <div class="w-20 h-20 bg-white border rounded-xl flex items-center justify-center overflow-hidden p-1" id="set-logo-preview">
-                            ${tempLogoDataUrl ? `<img src="${tempLogoDataUrl}" class="max-w-full max-h-full object-contain">` : `<span class="text-xs text-slate-400">No Logo</span>`}
-                        </div>
-                        <div class="space-y-1">
-                            <label class="block text-xs font-bold uppercase text-slate-600">Company Logo</label>
-                            <input type="file" id="set-logo-file" accept="image/*" ${!canEdit ? 'disabled' : ''} class="text-xs text-slate-600">
-                            <p class="text-[11px] text-slate-400">Displayed on Login Screen, Home Banner, Top Navigation &amp; Delivery Challans</p>
-                        </div>
-                    </div>
-                    <div class="flex justify-end">
-                        <button type="button" onclick="saveCompanySettings()" ${!canEdit ? 'disabled' : ''} class="px-6 py-2.5 ${!canEdit ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md'} font-bold rounded-xl text-sm flex items-center gap-2">
-                            <i data-lucide="save" class="w-4 h-4"></i> Save Company Settings
-                        </button>
                     </div>
                 </div>
             `;
-
-            const logoFileEl = document.getElementById('set-logo-file');
-            if (logoFileEl) {
-                logoFileEl.onchange = function(e) {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = function(ev) {
-                        tempLogoDataUrl = ev.target.result;
-                        const prev = document.getElementById('set-logo-preview');
-                        if (prev) prev.innerHTML = `<img src="${tempLogoDataUrl}" class="max-w-full max-h-full object-contain">`;
-                    };
-                    reader.readAsDataURL(file);
-                };
-            }
         }
+
+        let pendingLogoDataUrl = null;
+
+        window.handleLogoUpload = function(event) {
+            if (!requireEditPermission('system-settings', 'upload company logo')) return;
+            const file = event.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                pendingLogoDataUrl = e.target.result;
+                renderSystemSettingsView(document.getElementById('main-content'));
+                const img = document.getElementById('preview-logo-img');
+                if (img) img.src = pendingLogoDataUrl;
+                refreshIconsSafe();
+                showToast('Logo preview ready. Click "Save Company Settings" to apply.', 'info');
+            };
+            reader.readAsDataURL(file);
+        };
+
+        window.removeCompanyLogo = async function() {
+            if (!requireEditPermission('system-settings', 'remove company logo')) return;
+            pendingLogoDataUrl = '';
+            state.settings = { ...(state.settings || DEFAULT_SETTINGS), logoDataUrl: '' };
+            saveToLocalStorage();
+            applyCompanyBranding();
+            renderSystemSettingsView(document.getElementById('main-content'));
+            refreshIconsSafe();
+            showToast('Company logo removed.', 'info');
+            if (firestoreDb) {
+                try { await setDoc(doc(firestoreDb, 'settings', 'MAIN_SETTINGS'), state.settings); } catch (e) {}
+            }
+        };
 
         window.saveCompanySettings = async function() {
             if (!requireEditPermission('system-settings', 'save company settings')) return;
+            const current = state.settings || DEFAULT_SETTINGS;
             const updated = {
+                ...current,
                 id: 'MAIN_SETTINGS',
-                softwareName: (document.getElementById('set-soft-name')?.value || '').trim() || 'StockTransfer ERP',
-                companyName: (document.getElementById('set-comp-name')?.value || '').trim() || 'Enterprise Food & Supply Co.',
+                softwareName: (document.getElementById('set-software')?.value || '').trim() || 'StockTransfer ERP',
+                companyName: (document.getElementById('set-company')?.value || '').trim() || 'Enterprise Food & Supply Co.',
                 tagline: (document.getElementById('set-tagline')?.value || '').trim(),
-                address: (document.getElementById('set-addr')?.value || '').trim(),
+                address: (document.getElementById('set-address')?.value || '').trim(),
                 phone: (document.getElementById('set-phone')?.value || '').trim(),
                 email: (document.getElementById('set-email')?.value || '').trim(),
                 taxId: (document.getElementById('set-tax')?.value || '').trim(),
-                logoDataUrl: tempLogoDataUrl || ''
+                logoDataUrl: pendingLogoDataUrl !== null ? pendingLogoDataUrl : (current.logoDataUrl || '')
             };
+
             state.settings = updated;
+            pendingLogoDataUrl = null;
             saveToLocalStorage();
             applyCompanyBranding();
+            renderCurrentRoute();
+            showToast('Company & system settings saved!', 'success');
+
             if (firestoreDb) {
                 try { await setDoc(doc(firestoreDb, 'settings', 'MAIN_SETTINGS'), updated); } catch (e) {}
             }
-            renderCurrentRoute();
-            showToast('Company & System Information saved and applied!', 'success');
         };
 
         // ==================== EXCEL IMPORT & RECORD DELETION ====================
-        window.importExcelData = async function(event, targetCollection) {
-            if (!requireEditPermission(currentRoute || 'master-items', `import ${targetCollection}`)) return;
+        window.importExcelData = function(event, colName) {
+            if (!requireEditPermission(currentRoute || 'master-items', `import ${colName}`)) return;
             const file = event.target.files?.[0];
             if (!file || !window.XLSX) return;
-
-            if (targetCollection === 'items' && importCompletedForCategory) {
-                event.target.value = '';
-                return showToast('Import already completed for this category. Click "Refresh" to choose another category.', 'warning');
-            }
-
-            if (targetCollection === 'items' && !itemMasterFilterCatId) {
-                event.target.value = '';
-                return showToast('Please select a target category first before importing items!', 'error');
-            }
-
             const reader = new FileReader();
             reader.onload = async function(e) {
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
                     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+                    const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                    if (rows.length <= 1) return showToast('Excel file appears empty', 'warning');
 
-                    let importedCount = 0;
+                    let count = 0;
+                    for (let i = 1; i < rows.length; i++) {
+                        const r = rows[i];
+                        if (!r || r.length === 0) continue;
 
-                    if (targetCollection === 'categories') {
-                        for (let i = 0; i < rows.length; i++) {
-                            const r = rows[i];
-                            if (!r || r.length === 0) continue;
-                            const c0 = String(r[0] || '').trim();
-                            const c1 = String(r[1] || '').trim();
-
-                            if (i === 0 && (c0.toLowerCase() === 'sr' || c0.toLowerCase() === 'category name' || c1.toLowerCase() === 'category name')) continue;
-
-                            const catName = (c1 && !/^\d+$/.test(c1)) ? c1 : (c0 && !/^\d+$/.test(c0) ? c0 : '');
-                            if (!catName) continue;
-
-                            const exists = (state.categories || []).some(c => c.name.toLowerCase() === catName.toLowerCase());
-                            if (!exists) {
-                                await dbSaveRecord('categories', {
-                                    id: 'CAT-' + Date.now() + '-' + importedCount,
-                                    name: catName
-                                });
-                                importedCount++;
+                        if (colName === 'categories') {
+                            const catName = String(r[1] || r[0] || '').trim();
+                            if (catName) {
+                                const rec = { id: 'CAT-' + Date.now() + '-' + i, name: catName };
+                                await dbSaveRecord('categories', rec);
+                                count++;
                             }
-                        }
-                    } else if (targetCollection === 'items') {
-                        const targetCatId = itemMasterFilterCatId;
-                        const targetCat = (state.categories || []).find(c => c.id === targetCatId);
+                        } else if (colName === 'items') {
+                            const code = String(r[1] || '').trim();
+                            const name = String(r[2] || '').trim();
+                            const unit = String(r[3] || 'PCS').trim().toUpperCase();
+                            const altUnit = String(r[4] || '').trim().toUpperCase();
+                            const convFactor = parseFloat(r[5]) || 1;
+                            const rawStatus = String(r[6] || 'Active').trim();
+                            const status = rawStatus.toLowerCase() === 'inactive' ? 'Inactive' : 'Active';
 
-                        for (let i = 0; i < rows.length; i++) {
-                            const r = rows[i];
-                            if (!r || r.length === 0) continue;
-                            const c0 = String(r[0] || '').trim();
-                            const c1 = String(r[1] || '').trim();
-                            const c2 = String(r[2] || '').trim();
-                            const c3 = String(r[3] || '').trim();
-                            const c4 = String(r[4] || '').trim();
-
-                            if (i === 0 && (c0.toLowerCase() === 'sr' || c1.toLowerCase().includes('code') || c2.toLowerCase().includes('name'))) continue;
-
-                            let code = '', name = '', unit = 'PCS', status = 'Active';
-                            if (/^\d+$/.test(c0) && c1 && c2) {
-                                code = c1;
-                                name = c2;
-                                unit = (c3 || 'PCS').toUpperCase();
-                                status = /inactive/i.test(c4) ? 'Inactive' : 'Active';
-                            } else if (c0 && c1) {
-                                code = c0;
-                                name = c1;
-                                unit = (c2 || 'PCS').toUpperCase();
-                                status = /inactive/i.test(c3) ? 'Inactive' : 'Active';
+                            if (code && name) {
+                                const targetCatId = itemMasterFilterCatId || (state.categories[0]?.id || 'CAT-GEN');
+                                const rec = {
+                                    id: 'ITM-' + Date.now() + '-' + i,
+                                    code,
+                                    name,
+                                    unit,
+                                    altUnit,
+                                    conversionFactor: convFactor > 0 ? convFactor : 1,
+                                    conversionDirection: 'down',
+                                    status,
+                                    categoryId: targetCatId
+                                };
+                                await dbSaveRecord('items', rec);
+                                count++;
                             }
-
-                            if (!name) continue;
-                            if (!code) code = 'ITM-' + (importedCount + 1);
-
-                            await dbSaveRecord('items', {
-                                id: 'ITM-' + Date.now() + '-' + importedCount,
-                                code: code,
-                                name: name,
-                                unit: unit,
-                                altUnit: '',
-                                conversionFactor: 1,
-                                conversionDirection: 'down',
-                                status: status,
-                                categoryId: targetCatId
-                            });
-                            importedCount++;
-                        }
-
-                        if (importedCount > 0) {
-                            importCompletedForCategory = true;
-                        }
-                        event.target.value = '';
-                        renderCurrentRoute();
-                        showToast(`Imported ${importedCount} item(s) into "${targetCat ? targetCat.name : 'Selected Category'}"! Import locked for this category until Refresh.`, 'success');
-                        return;
-                    } else if (targetCollection === 'branches') {
-                        for (let i = 0; i < rows.length; i++) {
-                            const r = rows[i];
-                            if (!r || r.length === 0) continue;
-                            const c0 = String(r[0] || '').trim();
-                            const c1 = String(r[1] || '').trim();
-                            const c2 = String(r[2] || '').trim();
-                            const c3 = String(r[3] || '').trim();
-
-                            if (i === 0 && (c0.toLowerCase() === 'sr' || c1.toLowerCase().includes('id') || c1.toLowerCase().includes('code') || c2.toLowerCase().includes('branch'))) continue;
-
-                            let code = '', name = '', address = '';
-                            if (/^\d+$/.test(c0) && c1 && c2) {
-                                code = c1;
-                                name = c2;
-                                address = c3;
-                            } else if (c0 && c1) {
-                                code = c0;
-                                name = c1;
-                                address = c2;
+                        } else if (colName === 'branches') {
+                            const code = String(r[1] || '').trim();
+                            const name = String(r[2] || '').trim();
+                            const address = String(r[3] || '').trim();
+                            if (code && name) {
+                                const rec = { id: 'BR-' + Date.now() + '-' + i, code, name, address };
+                                await dbSaveRecord('branches', rec);
+                                count++;
                             }
-
-                            if (!name) continue;
-                            if (!code) code = 'BR-' + (importedCount + 1);
-
-                            await dbSaveRecord('branches', {
-                                id: 'BR-' + Date.now() + '-' + importedCount,
-                                code: code,
-                                name: name,
-                                address: address || '-'
-                            });
-                            importedCount++;
-                        }
-                    } else if (targetCollection === 'destinations') {
-                        for (let i = 0; i < rows.length; i++) {
-                            const r = rows[i];
-                            if (!r || r.length === 0) continue;
-                            const c0 = String(r[0] || '').trim();
-                            const c1 = String(r[1] || '').trim();
-                            const c2 = String(r[2] || '').trim();
-
-                            if (i === 0 && (c0.toLowerCase() === 'sr' || c1.toLowerCase().includes('destination') || c1.toLowerCase().includes('name'))) continue;
-
-                            let name = '', type = 'Warehouse';
-                            if (/^\d+$/.test(c0) && c1) {
-                                name = c1;
-                                type = c2 || 'Warehouse';
-                            } else if (c0) {
-                                name = c0;
-                                type = c1 || 'Warehouse';
+                        } else if (colName === 'destinations') {
+                            const name = String(r[1] || '').trim();
+                            const type = String(r[2] || 'Warehouse').trim();
+                            if (name) {
+                                const rec = { id: 'DST-' + Date.now() + '-' + i, name, type };
+                                await dbSaveRecord('destinations', rec);
+                                count++;
                             }
-
-                            if (!name) continue;
-
-                            await dbSaveRecord('destinations', {
-                                id: 'DST-' + Date.now() + '-' + importedCount,
-                                name: name,
-                                type: type
-                            });
-                            importedCount++;
                         }
                     }
-
                     event.target.value = '';
+                    if (colName === 'items' && count > 0) {
+                        importCompletedForCategory = true;
+                    }
                     renderCurrentRoute();
-                    showToast(`Successfully imported ${importedCount} ${targetCollection}!`, 'success');
+                    showToast(`Imported ${count} ${colName} successfully!`, 'success');
                 } catch (err) {
                     console.error(err);
-                    showToast('Failed to parse Excel file. Please check format.', 'error');
+                    showToast('Error importing Excel file', 'error');
                 }
             };
             reader.readAsArrayBuffer(file);
         };
 
         window.deleteRecord = async function(colName, id) {
-            if (!requireEditPermission(currentRoute || 'master-items', `delete from ${colName}`)) return;
+            if (!requireEditPermission(currentRoute || 'master-items', `delete ${colName} record`)) return;
             openModal({
                 title: 'Confirm Deletion',
-                bodyHtml: `<p>Are you sure you want to permanently delete this record?</p>`,
+                bodyHtml: `<p>Are you sure you want to delete this <strong>${escapeHtml(colName)}</strong> record?</p>`,
                 confirmText: 'Delete',
                 onConfirm: async () => {
                     await dbDeleteRecord(colName, id);
                     closeModal();
                     renderCurrentRoute();
-                    showToast('Record deleted!');
+                    showToast('Deleted successfully!', 'success');
                 }
             });
         };
 
-        try { lucide.createIcons(); } catch (e) {}
+        refreshIconsSafe();
         initHybridDatabase();
     </script>
 </body>
