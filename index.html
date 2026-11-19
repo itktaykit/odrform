@@ -89,7 +89,7 @@
 
     <!-- Custom Modal Container -->
     <div id="custom-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-200">
             <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <h3 id="modal-title" class="text-lg font-bold text-slate-900">Modal Title</h3>
                 <button onclick="closeModal()" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg transition">
@@ -198,7 +198,8 @@
                     <h2 id="page-title" class="text-xl font-bold text-slate-900">Dashboard</h2>
                     <p id="page-subtitle" class="text-xs text-slate-500">Manage stock transfer requests and warehouse dispatches</p>
                 </div>
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2.5 flex-wrap">
+                    <span id="header-access-badge" class="px-2.5 py-1 rounded-full text-[11px] font-bold border"></span>
                     <span id="header-branch-pill" class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-bold flex items-center gap-1.5">
                         <i data-lucide="shield" class="w-3.5 h-3.5"></i>
                         <span id="header-role-label">Authenticated</span>
@@ -266,8 +267,27 @@
             return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
         }
 
-        const TODAY = new Date().toISOString().split('T')[0];
-        const TOMORROW = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+        function getLocalToday() {
+            const now = new Date();
+            const offset = now.getTimezoneOffset() * 60000;
+            return new Date(now.getTime() - offset).toISOString().split('T')[0];
+        }
+
+        function getLocalOffsetDate(daysOffset = 1) {
+            const now = new Date();
+            const offset = now.getTimezoneOffset() * 60000;
+            return new Date(now.getTime() - offset + daysOffset * 86400000).toISOString().split('T')[0];
+        }
+
+        const TODAY = getLocalToday();
+        const TOMORROW = getLocalOffsetDate(1);
+
+        const ROLE_CATALOG = [
+            { id: 'admin', label: 'Administrator' },
+            { id: 'branch', label: 'Branch User' },
+            { id: 'factory_warehouse', label: 'Destination / Warehouse User' },
+            { id: 'auditor', label: 'Viewer / Auditor' }
+        ];
 
         // Single source of truth for all menus & submenus; automatically discovered by User Role Permissions
         const SYSTEM_MENU_REGISTRY = [
@@ -276,10 +296,10 @@
                 label: 'Order Transaction',
                 icon: 'arrow-left-right',
                 children: [
-                    { id: 'order-form', label: 'Stock Transfer Order Form', icon: 'clipboard-edit', defaultRoles: ['admin', 'branch'] },
-                    { id: 'my-orders', label: 'Branch Order History', icon: 'history', defaultRoles: ['admin', 'branch', 'factory_warehouse'] },
-                    { id: 'order-matrix', label: 'Consolidated Order Matrix', icon: 'table-2', defaultRoles: ['admin', 'factory_warehouse'] },
-                    { id: 'delivery-challan', label: 'Delivery Challan & Print', icon: 'printer', defaultRoles: ['admin', 'factory_warehouse'] }
+                    { id: 'order-form', label: 'Stock Transfer Order Form', icon: 'clipboard-edit', defaultViewRoles: ['admin', 'branch'], defaultEditRoles: ['admin', 'branch'] },
+                    { id: 'my-orders', label: 'Branch Order History', icon: 'history', defaultViewRoles: ['admin', 'branch', 'factory_warehouse', 'auditor'], defaultEditRoles: ['admin'] },
+                    { id: 'order-matrix', label: 'Consolidated Order Matrix', icon: 'table-2', defaultViewRoles: ['admin', 'factory_warehouse', 'auditor'], defaultEditRoles: ['admin', 'factory_warehouse'] },
+                    { id: 'delivery-challan', label: 'Delivery Challan & Print', icon: 'printer', defaultViewRoles: ['admin', 'factory_warehouse', 'auditor'], defaultEditRoles: ['admin', 'factory_warehouse'] }
                 ]
             },
             {
@@ -287,10 +307,10 @@
                 label: 'App Settings',
                 icon: 'sliders-horizontal',
                 children: [
-                    { id: 'master-items', label: 'Categories & Item Master', icon: 'package', defaultRoles: ['admin'] },
-                    { id: 'master-locations', label: 'Branches & Destinations', icon: 'building-2', defaultRoles: ['admin'] },
-                    { id: 'master-users', label: 'User Accounts & Roles', icon: 'users', defaultRoles: ['admin'] },
-                    { id: 'system-settings', label: 'Company & System Information', icon: 'settings', defaultRoles: ['admin'] }
+                    { id: 'master-items', label: 'Categories & Item Master', icon: 'package', defaultViewRoles: ['admin', 'auditor'], defaultEditRoles: ['admin'] },
+                    { id: 'master-locations', label: 'Branches & Destinations', icon: 'building-2', defaultViewRoles: ['admin', 'auditor'], defaultEditRoles: ['admin'] },
+                    { id: 'master-users', label: 'User Accounts & Roles', icon: 'users', defaultViewRoles: ['admin'], defaultEditRoles: ['admin'] },
+                    { id: 'system-settings', label: 'Company & System Information', icon: 'settings', defaultViewRoles: ['admin'], defaultEditRoles: ['admin'] }
                 ]
             }
         ];
@@ -299,11 +319,24 @@
             return SYSTEM_MENU_REGISTRY.flatMap(g => g.children.map(c => c.id));
         }
 
-        function buildDefaultPermissionsForRole(role) {
+        function getUserRolesList(user) {
+            if (!user) return [];
+            if (Array.isArray(user.roles) && user.roles.length > 0) {
+                return Array.from(new Set(user.roles));
+            }
+            return user.role ? [user.role] : ['branch'];
+        }
+
+        function buildDefaultPermissionsForRoles(rolesInput) {
+            const roles = Array.isArray(rolesInput) && rolesInput.length > 0 ? rolesInput : ['branch'];
+            const isAdmin = roles.includes('admin');
             const perms = {};
+
             SYSTEM_MENU_REGISTRY.forEach(group => {
                 group.children.forEach(sub => {
-                    perms[sub.id] = role === 'admin' ? true : sub.defaultRoles.includes(role);
+                    const canView = isAdmin || roles.some(r => sub.defaultViewRoles.includes(r));
+                    const canEdit = isAdmin || (canView && roles.some(r => sub.defaultEditRoles.includes(r)));
+                    perms[sub.id] = { view: canView, edit: canView && canEdit };
                 });
             });
             return perms;
@@ -312,13 +345,52 @@
         function resolveUserPermissions(user) {
             const allIds = getAllScreenIds();
             if (!user) return {};
-            const base = buildDefaultPermissionsForRole(user.role);
+            const roles = getUserRolesList(user);
+            const base = buildDefaultPermissionsForRoles(roles);
             const custom = user.permissions && typeof user.permissions === 'object' ? user.permissions : {};
             const resolved = {};
+
             allIds.forEach(id => {
-                resolved[id] = custom[id] !== undefined ? Boolean(custom[id]) : Boolean(base[id]);
+                const rawEntry = custom[id];
+                if (typeof rawEntry === 'boolean') {
+                    // Backward compatibility if a legacy boolean was saved
+                    resolved[id] = { view: rawEntry, edit: rawEntry && roles.includes('admin') };
+                } else if (rawEntry && typeof rawEntry === 'object') {
+                    const canView = rawEntry.view !== undefined ? Boolean(rawEntry.view) : Boolean(base[id]?.view);
+                    const canEdit = rawEntry.edit !== undefined ? Boolean(rawEntry.edit) : Boolean(base[id]?.edit);
+                    resolved[id] = {
+                        view: canView,
+                        edit: canView && canEdit
+                    };
+                } else {
+                    resolved[id] = {
+                        view: Boolean(base[id]?.view),
+                        edit: Boolean(base[id]?.edit)
+                    };
+                }
             });
+
             return resolved;
+        }
+
+        function canViewScreen(screenId, user = currentUser) {
+            if (!user) return false;
+            const perms = resolveUserPermissions(user);
+            return Boolean(perms[screenId]?.view);
+        }
+
+        function canEditScreen(screenId, user = currentUser) {
+            if (!user) return false;
+            const perms = resolveUserPermissions(user);
+            return Boolean(perms[screenId]?.view && perms[screenId]?.edit);
+        }
+
+        function requireEditPermission(screenId, actionLabel = 'modify data') {
+            if (!canEditScreen(screenId)) {
+                showToast(`View-Only Access: You do not have Edit/Save permission to ${actionLabel}.`, 'warning');
+                return false;
+            }
+            return true;
         }
 
         const DEFAULT_SETTINGS = {
@@ -343,7 +415,7 @@
             orders: []
         };
 
-        const STORAGE_KEY = 'kty_store_order_secure_v11';
+        const STORAGE_KEY = 'kty_store_order_secure_v12';
         let state = JSON.parse(JSON.stringify(CLEAN_DEFAULT_DATA));
 
         async function ensureDefaultAdmin() {
@@ -355,9 +427,10 @@
                     passwordHash: defaultHash,
                     fullName: 'System Administrator',
                     role: 'admin',
+                    roles: ['admin'],
                     branchId: '',
                     destinationId: '',
-                    permissions: buildDefaultPermissionsForRole('admin')
+                    permissions: buildDefaultPermissionsForRoles(['admin'])
                 };
                 state.users = [adminUser];
                 saveToLocalStorage();
@@ -384,7 +457,10 @@
                             altUnit: '',
                             ...it
                         })),
-                        users: parsed.users || [],
+                        users: (parsed.users || []).map(u => ({
+                            ...u,
+                            roles: Array.isArray(u.roles) && u.roles.length > 0 ? u.roles : [u.role || 'branch']
+                        })),
                         orders: parsed.orders || []
                     };
                 } catch (e) {}
@@ -418,6 +494,10 @@
                     conversionFactor: 1,
                     altUnit: '',
                     ...it
+                }));
+                state.users = (state.users || []).map(u => ({
+                    ...u,
+                    roles: Array.isArray(u.roles) && u.roles.length > 0 ? u.roles : [u.role || 'branch']
                 }));
                 saveToLocalStorage();
             } catch (err) {
@@ -480,7 +560,7 @@
         };
 
         window.clearCollection = async function(colName) {
-            if (currentUser?.role !== 'admin') return showToast('Permission denied: Admin only.', 'error');
+            if (!requireEditPermission(currentRoute, `clear ${colName}`)) return;
             openModal({
                 title: `Clear All ${colName.toUpperCase()}`,
                 bodyHtml: `<p>Are you sure you want to delete <strong>all</strong> records in <strong>${escapeHtml(colName)}</strong>? This cannot be undone.</p>`,
@@ -563,11 +643,38 @@
             window.addEventListener(evt, resetInactivityTimer, { passive: true });
         });
 
+        function formatRolesSummary(user) {
+            const roles = getUserRolesList(user);
+            return roles.map(r => r.replace('_', ' ').toUpperCase()).join(' + ');
+        }
+
+        function updateHeaderUserDisplay(user) {
+            const rolesLabel = formatRolesSummary(user);
+            document.getElementById('user-display-name').textContent = user.fullName;
+            document.getElementById('user-display-role').textContent = rolesLabel;
+            document.getElementById('header-role-label').textContent = `${user.fullName} (${rolesLabel})`;
+        }
+
+        function updateHeaderScreenAccessBadge() {
+            const badge = document.getElementById('header-access-badge');
+            if (!currentUser || !badge) return;
+            const editable = canEditScreen(currentRoute);
+            if (editable) {
+                badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200';
+                badge.textContent = 'Mode: View & Edit / Save';
+            } else {
+                badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border bg-amber-50 text-amber-700 border-amber-200';
+                badge.textContent = 'Mode: View Only';
+            }
+        }
+
         function pickInitialRouteForUser(user) {
-            const perms = resolveUserPermissions(user);
-            const preferred = user.role === 'factory_warehouse' ? 'order-matrix' : 'order-form';
-            if (perms[preferred]) return preferred;
-            const firstAllowed = getAllScreenIds().find(id => perms[id]);
+            const roles = getUserRolesList(user);
+            const preferred = (roles.includes('factory_warehouse') || roles.includes('auditor')) && !roles.includes('branch')
+                ? 'order-matrix'
+                : 'order-form';
+            if (canViewScreen(preferred, user)) return preferred;
+            const firstAllowed = getAllScreenIds().find(id => canViewScreen(id, user));
             return firstAllowed || 'my-orders';
         }
 
@@ -579,13 +686,11 @@
                 if (Date.now() < parseInt(expiry)) {
                     try {
                         currentUser = JSON.parse(savedUser);
+                        currentUser.roles = getUserRolesList(currentUser);
                         document.getElementById('login-view').classList.add('hidden');
                         document.getElementById('app-view').classList.remove('hidden');
 
-                        document.getElementById('user-display-name').textContent = currentUser.fullName;
-                        document.getElementById('user-display-role').textContent = currentUser.role.replace('_', ' ');
-                        document.getElementById('header-role-label').textContent = `${currentUser.fullName} (${currentUser.role.toUpperCase()})`;
-
+                        updateHeaderUserDisplay(currentUser);
                         currentRoute = pickInitialRouteForUser(currentUser);
 
                         resetInactivityTimer();
@@ -642,7 +747,10 @@
             }
 
             failedAttempts = 0;
-            currentUser = { ...matchedUser };
+            currentUser = {
+                ...matchedUser,
+                roles: getUserRolesList(matchedUser)
+            };
 
             sessionStorage.setItem('kty_active_user', JSON.stringify(currentUser));
             resetInactivityTimer();
@@ -653,10 +761,7 @@
             document.getElementById('login-view').classList.add('hidden');
             document.getElementById('app-view').classList.remove('hidden');
 
-            document.getElementById('user-display-name').textContent = currentUser.fullName;
-            document.getElementById('user-display-role').textContent = currentUser.role.replace('_', ' ');
-            document.getElementById('header-role-label').textContent = `${currentUser.fullName} (${currentUser.role.toUpperCase()})`;
-
+            updateHeaderUserDisplay(currentUser);
             currentRoute = pickInitialRouteForUser(currentUser);
 
             renderSidebarMenu();
@@ -683,7 +788,7 @@
             return SYSTEM_MENU_REGISTRY
                 .map(g => ({
                     ...g,
-                    children: g.children.filter(c => Boolean(perms[c.id]))
+                    children: g.children.filter(c => Boolean(perms[c.id]?.view))
                 }))
                 .filter(g => g.children.length > 0);
         }
@@ -700,6 +805,7 @@
         function renderSidebarMenu() {
             const nav = document.getElementById('sidebar-nav');
             const groups = getMenuGroups();
+            const perms = resolveUserPermissions(currentUser);
 
             nav.innerHTML = groups.map(group => {
                 const isOpen = expandedGroups[group.id] !== false;
@@ -715,12 +821,21 @@
                             <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? 'rotate-0' : '-rotate-90'}"></i>
                         </button>
                         <div class="${isOpen ? 'block' : 'hidden'} px-2 pb-2 pt-1 space-y-1">
-                            ${group.children.map(item => `
-                                <button onclick="navigateTo('${item.id}')" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold transition ${currentRoute === item.id ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
-                                    <i data-lucide="${item.icon}" class="w-4 h-4 shrink-0"></i>
-                                    <span class="truncate">${item.label}</span>
-                                </button>
-                            `).join('')}
+                            ${group.children.map(item => {
+                                const hasEdit = Boolean(perms[item.id]?.edit);
+                                const isCurrent = currentRoute === item.id;
+                                return `
+                                    <button onclick="navigateTo('${item.id}')" class="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold transition ${isCurrent ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
+                                        <span class="flex items-center gap-2.5 min-w-0">
+                                            <i data-lucide="${item.icon}" class="w-4 h-4 shrink-0"></i>
+                                            <span class="truncate">${item.label}</span>
+                                        </span>
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${isCurrent ? 'bg-white/20 text-white' : (hasEdit ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300')}">
+                                            ${hasEdit ? 'EDIT' : 'VIEW'}
+                                        </span>
+                                    </button>
+                                `;
+                            }).join('')}
                         </div>
                     </div>
                 `;
@@ -731,7 +846,7 @@
         window.navigateTo = function(routeId) {
             const allowed = getAllowedRoutes().map(r => r.id);
             if (!allowed.includes(routeId)) {
-                return showToast('Access Denied: You do not have permission for this module.', 'error');
+                return showToast('Access Denied: You do not have View permission for this module.', 'error');
             }
             currentRoute = routeId;
             renderSidebarMenu();
@@ -742,17 +857,18 @@
             const container = document.getElementById('main-content');
             const titles = {
                 'order-form': ['Stock Transfer Order Form', 'Order Transaction • Select items or whole categories to submit stock requests'],
-                'my-orders': ['Branch Order History', 'Order Transaction • View and track submitted stock transfer requests'],
+                'my-orders': ['Branch Order History', 'Order Transaction • View submitted stock transfer requests by date'],
                 'order-matrix': ['Consolidated Order Matrix', 'Order Transaction • Review selected & submitted items by date, edit inline, and execute challans'],
                 'delivery-challan': ['Delivery Challan & Print', 'Order Transaction • Select branches to generate and print delivery challans sequentially'],
                 'master-items': ['Categories & Item Master', 'App Settings • Manage categories, active/inactive status, multi-unit conversions, and items'],
                 'master-locations': ['Branches & Destinations', 'App Settings • Configure restaurant branches and supply warehouses'],
-                'master-users': ['User Accounts & Roles', 'App Settings • Dynamic menu/submenu permissions and user role management'],
+                'master-users': ['User Accounts & Roles', 'App Settings • Multi-role assignment, per-document View/Edit permissions & auto-sync'],
                 'system-settings': ['Company & System Information', 'App Settings • Configure software branding, company details, and logo']
             };
             const [t, sub] = titles[currentRoute] || ['Dashboard', ''];
             document.getElementById('page-title').textContent = t;
             document.getElementById('page-subtitle').textContent = sub;
+            updateHeaderScreenAccessBadge();
 
             if (currentRoute === 'order-form') renderOrderFormView(container);
             else if (currentRoute === 'my-orders') renderBranchHistoryView(container);
@@ -794,9 +910,17 @@
         }
 
         function renderOrderFormView(container) {
-            if (currentUser?.role === 'branch' && currentUser.branchId) {
+            const canEdit = canEditScreen('order-form');
+            const roles = getUserRolesList(currentUser);
+            const isBranchOnly = roles.includes('branch') && !roles.includes('admin') && currentUser?.branchId;
+
+            if (isBranchOnly) {
                 orderFormState.branchId = currentUser.branchId;
             }
+            if (!canEdit) {
+                orderFormState.isActive = false;
+            }
+
             const cats = state.categories;
             const activeCat = cats[orderFormState.catIdx] || cats[0];
             const catItems = activeCat
@@ -814,22 +938,30 @@
                 : catItems;
 
             const allVisibleChecked = items.length > 0 && items.every(it => Boolean(orderFormState.selectedItems[it.id]));
+            const inputsEnabled = canEdit && orderFormState.isActive;
 
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
+                    ${!canEdit ? `
+                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
+                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
+                            <span>You have <strong>View Only</strong> permission on Stock Transfer Order Form. Creating or saving orders is disabled for your account.</span>
+                        </div>
+                    ` : ''}
+
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                         <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-6 border-b border-slate-100">
                             <span class="px-3 py-1 rounded-full text-xs font-bold ${orderFormState.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}">
                                 ${orderFormState.isActive ? '● Form Active (Ready)' : '○ Locked (Click Add)'}
                             </span>
                             <div class="flex flex-wrap gap-2">
-                                <button onclick="activateOrderForm()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5 shadow-sm transition">
+                                <button onclick="activateOrderForm()" ${!canEdit ? 'disabled' : ''} class="px-4 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'} font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
                                     <i data-lucide="plus-circle" class="w-4 h-4"></i> Add
                                 </button>
-                                <button onclick="cancelOrderForm()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
+                                <button onclick="cancelOrderForm()" ${!canEdit ? 'disabled' : ''} class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
                                     <i data-lucide="x-circle" class="w-4 h-4"></i> Cancel
                                 </button>
-                                <button onclick="saveOrderForm()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md flex items-center gap-1.5 transition">
+                                <button onclick="saveOrderForm()" ${!canEdit ? 'disabled' : ''} class="px-5 py-2 ${!canEdit ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md'} font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
                                     <i data-lucide="send" class="w-4 h-4"></i> Save & Submit
                                 </button>
                             </div>
@@ -837,25 +969,25 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Branch</label>
-                                <select id="f-branch" ${currentUser?.role === 'branch' && currentUser.branchId ? 'disabled' : ''} class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
+                                <select id="f-branch" ${isBranchOnly || !inputsEnabled ? 'disabled' : ''} class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
                                     <option value="">Select Branch...</option>
                                     ${state.branches.map(b => `<option value="${b.id}" ${b.id === orderFormState.branchId ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-500 mb-1">To Destination</label>
-                                <select id="f-dest" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
+                                <select id="f-dest" ${!inputsEnabled ? 'disabled' : ''} class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
                                     <option value="">Select Destination...</option>
                                     ${state.destinations.map(d => `<option value="${d.id}" ${d.id === orderFormState.destinationId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Request Date</label>
-                                <input type="date" id="f-req" value="${orderFormState.requestDate}" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
+                                <input type="date" id="f-req" ${!inputsEnabled ? 'disabled' : ''} value="${orderFormState.requestDate}" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Delivery Date</label>
-                                <input type="date" id="f-del" value="${orderFormState.deliveryDate}" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
+                                <input type="date" id="f-del" ${!inputsEnabled ? 'disabled' : ''} value="${orderFormState.deliveryDate}" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
                             </div>
                         </div>
                     </div>
@@ -873,7 +1005,7 @@
                                         ${cats.map((c, i) => `<option value="${i}" ${i === orderFormState.catIdx ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
                                     </select>
                                     <label class="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" id="f-cat-select-all" ${!orderFormState.isActive ? 'disabled' : ''} ${allVisibleChecked ? 'checked' : ''} onchange="toggleCategoryOrderSelection(this.checked)" class="rounded text-blue-600 w-4 h-4">
+                                        <input type="checkbox" id="f-cat-select-all" ${!inputsEnabled ? 'disabled' : ''} ${allVisibleChecked ? 'checked' : ''} onchange="toggleCategoryOrderSelection(this.checked)" class="rounded text-blue-600 w-4 h-4">
                                         <span>Select Whole Category</span>
                                     </label>
                                 </div>
@@ -902,7 +1034,7 @@
                                     <thead class="bg-slate-100 text-xs font-bold text-slate-600 uppercase">
                                         <tr>
                                             <th class="py-3 px-3 text-center w-12">
-                                                <input type="checkbox" ${!orderFormState.isActive ? 'disabled' : ''} ${allVisibleChecked ? 'checked' : ''} onchange="toggleCategoryOrderSelection(this.checked)" class="rounded text-blue-600 w-4 h-4" title="Select all items in view">
+                                                <input type="checkbox" ${!inputsEnabled ? 'disabled' : ''} ${allVisibleChecked ? 'checked' : ''} onchange="toggleCategoryOrderSelection(this.checked)" class="rounded text-blue-600 w-4 h-4" title="Select all items in view">
                                             </th>
                                             <th class="py-3 px-3">Sr</th>
                                             <th class="py-3 px-3">Code</th>
@@ -921,7 +1053,7 @@
                                             return `
                                                 <tr class="${checked ? 'bg-blue-50/40' : ''}">
                                                     <td class="py-3 px-3 text-center">
-                                                        <input type="checkbox" ${!orderFormState.isActive ? 'disabled' : ''} ${checked ? 'checked' : ''} onchange="toggleOrderItemCheck('${it.id}', this.checked)" class="rounded text-blue-600 w-4 h-4">
+                                                        <input type="checkbox" ${!inputsEnabled ? 'disabled' : ''} ${checked ? 'checked' : ''} onchange="toggleOrderItemCheck('${it.id}', this.checked)" class="rounded text-blue-600 w-4 h-4">
                                                     </td>
                                                     <td class="py-3 px-3 text-slate-500 font-mono">${idx + 1}</td>
                                                     <td class="py-3 px-3 font-mono font-bold">${escapeHtml(it.code)}</td>
@@ -929,7 +1061,7 @@
                                                     <td class="py-3 px-3"><span class="px-2 py-0.5 bg-slate-100 text-xs font-bold rounded">${escapeHtml(it.unit)}</span></td>
                                                     <td class="py-3 px-3 text-xs font-medium text-indigo-700">${escapeHtml(convText)}</td>
                                                     <td class="py-3 px-4 text-right">
-                                                        <input type="number" min="0" step="any" data-item="${it.id}" ${!orderFormState.isActive ? 'disabled' : ''} value="${orderFormState.quantities[it.id] || ''}" oninput="updateQty('${it.id}', this.value)" class="w-28 px-3 py-1.5 text-right border rounded-xl font-bold">
+                                                        <input type="number" min="0" step="any" data-item="${it.id}" ${!inputsEnabled ? 'disabled' : ''} value="${orderFormState.quantities[it.id] || ''}" oninput="updateQty('${it.id}', this.value)" class="w-28 px-3 py-1.5 text-right border rounded-xl font-bold">
                                                     </td>
                                                 </tr>
                                             `;
@@ -966,12 +1098,14 @@
         }
 
         window.toggleOrderItemCheck = function(itemId, checked) {
+            if (!requireEditPermission('order-form', 'select items')) return;
             if (checked) orderFormState.selectedItems[itemId] = true;
             else delete orderFormState.selectedItems[itemId];
             renderOrderFormView(document.getElementById('main-content'));
         };
 
         window.toggleCategoryOrderSelection = function(checked) {
+            if (!requireEditPermission('order-form', 'select category items')) return;
             const cats = state.categories;
             const activeCat = cats[orderFormState.catIdx] || cats[0];
             if (!activeCat) return;
@@ -998,7 +1132,9 @@
         };
 
         window.activateOrderForm = function() {
+            if (!requireEditPermission('order-form', 'create a new order')) return;
             orderFormState.isActive = true;
+            orderFormState.requestDate = getLocalToday();
             renderOrderFormView(document.getElementById('main-content'));
             showToast('Form activated for new entry!', 'success');
         };
@@ -1013,6 +1149,7 @@
         };
 
         window.updateQty = function(itemId, val) {
+            if (!canEditScreen('order-form')) return;
             const num = parseFloat(val);
             if (num > 0) {
                 orderFormState.quantities[itemId] = num;
@@ -1028,10 +1165,10 @@
         };
 
         window.saveOrderForm = async function() {
+            if (!requireEditPermission('order-form', 'submit orders')) return;
             if (!orderFormState.branchId) return showToast('Please select a branch!', 'error');
             if (!orderFormState.destinationId) return showToast('Please select a destination!', 'error');
 
-            // Only submit checked items that have a positive quantity
             const submittedQuantities = {};
             const submittedItemIds = [];
             Object.entries(orderFormState.quantities || {}).forEach(([itemId, qty]) => {
@@ -1054,6 +1191,7 @@
             if (existingOrder) {
                 existingOrder.quantities = { ...(existingOrder.quantities || {}), ...submittedQuantities };
                 existingOrder.selectedItemIds = Array.from(new Set([...(existingOrder.selectedItemIds || []), ...submittedItemIds]));
+                existingOrder.requestDate = orderFormState.requestDate || getLocalToday();
                 existingOrder.updatedAt = new Date().toISOString();
                 existingOrder.status = 'Submitted';
                 await dbSaveRecord('orders', existingOrder);
@@ -1064,7 +1202,7 @@
                     branchName: branch ? branch.name : 'Branch',
                     destinationId: orderFormState.destinationId,
                     destinationName: dest ? dest.name : 'Destination',
-                    requestDate: orderFormState.requestDate,
+                    requestDate: orderFormState.requestDate || getLocalToday(),
                     deliveryDate: orderFormState.deliveryDate,
                     status: 'Submitted',
                     quantities: submittedQuantities,
@@ -1074,6 +1212,9 @@
                 await dbSaveRecord('orders', record);
             }
 
+            historyFilterDate = recordOrDate(orderFormState.requestDate || getLocalToday());
+            historyShowAllDates = false;
+
             orderFormState.isActive = false;
             orderFormState.quantities = {};
             orderFormState.selectedItems = {};
@@ -1082,21 +1223,69 @@
             navigateTo('my-orders');
         };
 
-        // ==================== 2. BRANCH ORDER HISTORY ====================
+        function recordOrDate(d) {
+            return d || getLocalToday();
+        }
+
+        function getOrderHistoryDate(order) {
+            if (order.requestDate && /^\d{4}-\d{2}-\d{2}$/.test(order.requestDate)) {
+                return order.requestDate;
+            }
+            if (order.updatedAt) {
+                return new Date(order.updatedAt).toISOString().split('T')[0];
+            }
+            return order.deliveryDate || getLocalToday();
+        }
+
+        // ==================== 2. BRANCH ORDER HISTORY (DATE CALENDAR) ====================
+        let historyFilterDate = TODAY;
+        let historyShowAllDates = false;
+
         function renderBranchHistoryView(container) {
-            let visibleOrders = state.orders;
-            if (currentUser?.role === 'branch' && currentUser.branchId) {
-                visibleOrders = state.orders.filter(o => o.branchId === currentUser.branchId);
+            const currentToday = getLocalToday();
+            if (!historyFilterDate) historyFilterDate = currentToday;
+
+            const roles = getUserRolesList(currentUser);
+            const isBranchScoped = roles.includes('branch') && !roles.includes('admin') && !roles.includes('factory_warehouse') && currentUser?.branchId;
+
+            let baseOrders = state.orders;
+            if (isBranchScoped) {
+                baseOrders = baseOrders.filter(o => o.branchId === currentUser.branchId);
             }
 
+            const visibleOrders = historyShowAllDates
+                ? baseOrders
+                : baseOrders.filter(o => getOrderHistoryDate(o) === historyFilterDate);
+
             container.innerHTML = `
-                <div class="max-w-5xl mx-auto bg-white rounded-2xl shadow-sm border p-6 space-y-4">
-                    <h3 class="text-lg font-bold">Submitted Orders History</h3>
+                <div class="max-w-5xl mx-auto bg-white rounded-2xl shadow-sm border p-6 space-y-5">
+                    <div class="flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-slate-200">
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-900">Submitted Orders History</h3>
+                            <p class="text-xs text-slate-500">Showing orders by date (defaults to current date: <strong>${escapeHtml(currentToday)}</strong>)</p>
+                        </div>
+
+                        <div class="flex flex-wrap items-end gap-2.5">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">History Date</label>
+                                <input type="date" id="history-date-picker" value="${escapeHtml(historyFilterDate)}" ${historyShowAllDates ? 'disabled' : ''} class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none">
+                            </div>
+                            <button type="button" onclick="resetHistoryToToday()" class="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold rounded-xl text-xs transition">
+                                Today (${escapeHtml(currentToday)})
+                            </button>
+                            <label class="inline-flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer select-none">
+                                <input type="checkbox" id="history-all-dates" ${historyShowAllDates ? 'checked' : ''} onchange="toggleHistoryAllDates(this.checked)" class="rounded text-blue-600 w-4 h-4">
+                                <span>All Dates</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-sm border-collapse">
                             <thead>
                                 <tr class="bg-slate-100 text-xs font-bold uppercase">
                                     <th class="p-3 border">Order ID</th>
+                                    <th class="p-3 border">Order Date</th>
                                     <th class="p-3 border">Branch</th>
                                     <th class="p-3 border">Destination</th>
                                     <th class="p-3 border">Delivery Date</th>
@@ -1106,15 +1295,17 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
-                                ${visibleOrders.length === 0 ? `<tr><td colspan="7" class="p-6 text-center text-slate-400">No orders submitted yet.</td></tr>` : 
+                                ${visibleOrders.length === 0 ? `<tr><td colspan="8" class="p-8 text-center text-slate-400 font-medium">No orders submitted for ${historyShowAllDates ? 'any date' : `<strong>${escapeHtml(historyFilterDate)}</strong>`}.</td></tr>` : 
                                     visibleOrders.map(o => {
                                         const itemCount = Object.values(o.quantities || {}).filter(v => v > 0).length;
+                                        const ordDate = getOrderHistoryDate(o);
                                         const badgeClass = o.status === 'Executed for Challan'
                                             ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                                             : 'bg-emerald-50 text-emerald-700 border border-emerald-200';
                                         return `
                                             <tr>
                                                 <td class="p-3 border font-mono font-bold">${escapeHtml(o.id)}</td>
+                                                <td class="p-3 border font-mono text-xs font-bold text-slate-700">${escapeHtml(ordDate)}</td>
                                                 <td class="p-3 border font-semibold">${escapeHtml(o.branchName)}</td>
                                                 <td class="p-3 border">${escapeHtml(o.destinationName)}</td>
                                                 <td class="p-3 border">${escapeHtml(o.deliveryDate)}</td>
@@ -1133,7 +1324,29 @@
                     </div>
                 </div>
             `;
+
+            const datePicker = document.getElementById('history-date-picker');
+            if (datePicker) {
+                datePicker.onchange = e => {
+                    historyFilterDate = e.target.value || getLocalToday();
+                    renderBranchHistoryView(container);
+                    lucide.createIcons();
+                };
+            }
         }
+
+        window.resetHistoryToToday = function() {
+            historyShowAllDates = false;
+            historyFilterDate = getLocalToday();
+            renderBranchHistoryView(document.getElementById('main-content'));
+            lucide.createIcons();
+        };
+
+        window.toggleHistoryAllDates = function(showAll) {
+            historyShowAllDates = Boolean(showAll);
+            renderBranchHistoryView(document.getElementById('main-content'));
+            lucide.createIcons();
+        };
 
         window.viewOrderDetails = function(orderId) {
             const ord = state.orders.find(o => o.id === orderId);
@@ -1181,9 +1394,10 @@
         }
 
         function renderOrderMatrixView(container) {
-            const canEditMatrix = currentUser && (currentUser.role === 'admin' || currentUser.role === 'factory_warehouse');
+            const canEditMatrix = canEditScreen('order-matrix');
+            const roles = getUserRolesList(currentUser);
 
-            const destFilter = (currentUser?.role === 'factory_warehouse' && currentUser.destinationId)
+            const destFilter = (roles.includes('factory_warehouse') && !roles.includes('admin') && currentUser?.destinationId)
                 ? currentUser.destinationId
                 : null;
 
@@ -1193,7 +1407,6 @@
                 dateOrders.some(o => o.branchId === b.id)
             );
 
-            // Only include active items that were selected/submitted in the date's orders
             const selectedItemIdsForDate = new Set();
             dateOrders.forEach(ord => {
                 const explicitIds = Array.isArray(ord.selectedItemIds) ? ord.selectedItemIds : [];
@@ -1214,6 +1427,13 @@
 
             container.innerHTML = `
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
+                    ${!canEditMatrix ? `
+                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
+                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
+                            <span>You have <strong>View Only</strong> permission on Consolidated Order Matrix. Inline cell editing and executing challans are disabled.</span>
+                        </div>
+                    ` : ''}
+
                     <div class="flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-slate-200">
                         <div class="flex flex-wrap items-end gap-4">
                             <div>
@@ -1237,7 +1457,7 @@
                             <button onclick="exportMatrixToExcel()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
                                 <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export Excel
                             </button>
-                            <button onclick="executeOrdersToChallan()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/25 transition">
+                            <button onclick="executeOrdersToChallan()" ${!canEditMatrix ? 'disabled' : ''} class="px-4 py-2 ${!canEditMatrix ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/25'} font-bold rounded-xl text-xs flex items-center gap-1.5 transition">
                                 <i data-lucide="play-circle" class="w-4 h-4"></i> Execute to Delivery Challan
                             </button>
                         </div>
@@ -1246,7 +1466,7 @@
                     <div class="flex items-center justify-between bg-indigo-50/70 border border-indigo-100 px-4 py-2.5 rounded-xl text-xs text-indigo-900">
                         <span class="flex items-center gap-1.5 font-medium">
                             <i data-lucide="mouse-pointer-click" class="w-4 h-4 text-indigo-600 shrink-0"></i>
-                            Showing only checked/submitted active items and branches with orders for <strong>${escapeHtml(matrixFilterDate || 'selected date')}</strong>. Double-click any branch cell to edit.
+                            Showing only checked/submitted active items and branches with orders for <strong>${escapeHtml(matrixFilterDate || 'selected date')}</strong>. ${canEditMatrix ? 'Double-click any branch cell to edit.' : 'View-only mode active.'}
                         </span>
                     </div>
 
@@ -1294,7 +1514,7 @@
                                                 data-branch-id="${b.id}"
                                                 ${canEditMatrix ? `ondblclick="startMatrixCellEdit(this)"` : ''}
                                                 class="py-2.5 px-3 text-center font-bold ${q > 0 ? 'text-slate-900 bg-emerald-50/40' : 'text-slate-400'} ${canEditMatrix ? 'excel-cell-editable' : ''}"
-                                                title="${canEditMatrix ? 'Double-click to edit quantity' : ''}"
+                                                title="${canEditMatrix ? 'Double-click to edit quantity' : 'View only'}"
                                             >${q > 0 ? q : 0}</td>
                                         `;
                                     }).join('');
@@ -1329,7 +1549,9 @@
         }
 
         window.executeOrdersToChallan = async function() {
-            const destFilter = (currentUser?.role === 'factory_warehouse' && currentUser.destinationId)
+            if (!requireEditPermission('order-matrix', 'execute orders to challan')) return;
+            const roles = getUserRolesList(currentUser);
+            const destFilter = (roles.includes('factory_warehouse') && !roles.includes('admin') && currentUser?.destinationId)
                 ? currentUser.destinationId
                 : null;
             const dateOrders = getSubmittedDateOrders(matrixFilterDate, destFilter);
@@ -1346,7 +1568,7 @@
                 await dbSaveRecord('orders', ord);
             }
 
-            challanDate = matrixFilterDate || TODAY;
+            challanDate = matrixFilterDate || getLocalToday();
             challanSelectedBranchIds = submittedBranchIds;
 
             showToast(`Executed ${dateOrders.length} order(s) for Delivery Challan!`, 'success');
@@ -1354,6 +1576,7 @@
         };
 
         window.startMatrixCellEdit = function(td) {
+            if (!canEditScreen('order-matrix')) return;
             if (td.classList.contains('excel-cell-editing')) return;
 
             const currentVal = parseFloat(td.textContent.trim()) || 0;
@@ -1436,9 +1659,9 @@
         };
 
         async function updateBranchOrderFromMatrix(branchId, itemId, newQty) {
-            const targetDate = matrixFilterDate || TODAY;
+            const targetDate = matrixFilterDate || getLocalToday();
             const branch = state.branches.find(b => b.id === branchId);
-            const destId = (currentUser?.role === 'factory_warehouse' && currentUser.destinationId)
+            const destId = (currentUser?.destinationId)
                 ? currentUser.destinationId
                 : (state.destinations[0]?.id || 'DST-01');
             const dest = state.destinations.find(d => d.id === destId);
@@ -1473,7 +1696,7 @@
                     branchName: branch ? branch.name : 'Branch',
                     destinationId: destId,
                     destinationName: dest ? dest.name : 'Central Supply',
-                    requestDate: TODAY,
+                    requestDate: getLocalToday(),
                     deliveryDate: targetDate,
                     status: 'Submitted',
                     quantities: { [itemId]: newQty },
@@ -1679,6 +1902,8 @@
         let importCompletedForCategory = false;
 
         function renderMasterItemsView(container) {
+            const canEdit = canEditScreen('master-items');
+
             if (state.categories.length > 0) {
                 if (!itemMasterFilterCatId || !state.categories.some(c => c.id === itemMasterFilterCatId)) {
                     itemMasterFilterCatId = state.categories[0].id;
@@ -1703,6 +1928,13 @@
 
             container.innerHTML = `
                 <div class="max-w-6xl mx-auto space-y-6">
+                    ${!canEdit ? `
+                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
+                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
+                            <span>You have <strong>View Only</strong> permission on Categories &amp; Item Master. Adding, editing, importing, or deleting is disabled.</span>
+                        </div>
+                    ` : ''}
+
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div>
@@ -1710,13 +1942,13 @@
                                 <p class="text-xs text-slate-500">Excel Format: [Sr, Category Name] or [Category Name]</p>
                             </div>
                             <div class="flex gap-2">
-                                <button onclick="openCategoryModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
+                                <button onclick="openCategoryModal()" ${!canEdit ? 'disabled' : ''} class="px-4 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
                                     <i data-lucide="folder-plus" class="w-4 h-4"></i> Add Category
                                 </button>
-                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer flex items-center gap-1.5 transition">
-                                    <i data-lucide="upload" class="w-4 h-4"></i> Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'categories')">
+                                <label class="px-4 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer'} font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
+                                    <i data-lucide="upload" class="w-4 h-4"></i> Import Excel <input type="file" accept=".xlsx, .xls, .csv" ${!canEdit ? 'disabled' : ''} class="hidden" onchange="importExcelData(event, 'categories')">
                                 </label>
-                                ${state.categories.length > 0 ? `<button onclick="clearCollection('categories')" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold rounded-xl text-sm flex items-center gap-1.5 transition"><i data-lucide="trash-2" class="w-4 h-4"></i> Clear All</button>` : ''}
+                                ${state.categories.length > 0 && canEdit ? `<button onclick="clearCollection('categories')" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold rounded-xl text-sm flex items-center gap-1.5 transition"><i data-lucide="trash-2" class="w-4 h-4"></i> Clear All</button>` : ''}
                             </div>
                         </div>
                         <table class="w-full text-left text-sm border">
@@ -1728,8 +1960,10 @@
                                             <td class="p-3 border font-mono">${escapeHtml(c.id)}</td>
                                             <td class="p-3 border font-semibold">${escapeHtml(c.name)}</td>
                                             <td class="p-3 border text-right space-x-2">
-                                                <button onclick="openCategoryModal('${c.id}')" class="text-blue-600 font-bold">Edit</button>
-                                                <button onclick="deleteRecord('categories', '${c.id}')" class="text-rose-600 font-bold">Delete</button>
+                                                ${canEdit ? `
+                                                    <button onclick="openCategoryModal('${c.id}')" class="text-blue-600 font-bold">Edit</button>
+                                                    <button onclick="deleteRecord('categories', '${c.id}')" class="text-rose-600 font-bold">Delete</button>
+                                                ` : `<span class="text-xs text-slate-400 font-semibold">View Only</span>`}
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -1758,16 +1992,16 @@
                                 <button onclick="refreshItemMasterView()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition" title="Clear and Reset View">
                                     <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Refresh
                                 </button>
-                                <button onclick="deleteSelectedItems()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
+                                <button onclick="deleteSelectedItems()" ${!canEdit ? 'disabled' : ''} class="px-3 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-700 text-white shadow-sm'} font-semibold rounded-xl text-xs flex items-center gap-1.5 transition">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Selected
                                 </button>
-                                <button onclick="openItemModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
+                                <button onclick="openItemModal()" ${!canEdit ? 'disabled' : ''} class="px-4 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
                                     <i data-lucide="plus" class="w-4 h-4"></i> Add Item
                                 </button>
                                 
-                                <label class="px-4 py-2 ${importCompletedForCategory ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-65' : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-sm'} font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
+                                <label class="px-4 py-2 ${!canEdit || importCompletedForCategory ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-65' : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-sm'} font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
                                     <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> ${importCompletedForCategory ? 'Imported (Locked)' : 'Import Excel'}
-                                    <input type="file" accept=".xlsx, .xls, .csv" ${importCompletedForCategory ? 'disabled' : ''} class="hidden" onchange="importExcelData(event, 'items')">
+                                    <input type="file" accept=".xlsx, .xls, .csv" ${!canEdit || importCompletedForCategory ? 'disabled' : ''} class="hidden" onchange="importExcelData(event, 'items')">
                                 </label>
                             </div>
                         </div>
@@ -1784,7 +2018,7 @@
                                 <thead>
                                     <tr class="bg-slate-100 font-bold text-xs">
                                         <th class="p-3 border text-center w-10">
-                                            <input type="checkbox" id="select-all-items" onchange="toggleSelectAll('item-checkbox', this.checked)" class="rounded text-blue-600 w-4 h-4">
+                                            <input type="checkbox" id="select-all-items" ${!canEdit ? 'disabled' : ''} onchange="toggleSelectAll('item-checkbox', this.checked)" class="rounded text-blue-600 w-4 h-4">
                                         </th>
                                         <th class="p-3 border w-12">Sr</th>
                                         <th class="p-3 border">Code</th>
@@ -1803,7 +2037,7 @@
                                             return `
                                                 <tr>
                                                     <td class="p-3 border text-center">
-                                                        <input type="checkbox" value="${it.id}" class="item-checkbox rounded text-blue-600 w-4 h-4">
+                                                        <input type="checkbox" value="${it.id}" ${!canEdit ? 'disabled' : ''} class="item-checkbox rounded text-blue-600 w-4 h-4">
                                                     </td>
                                                     <td class="p-3 border text-slate-500 font-mono">${idx + 1}</td>
                                                     <td class="p-3 border font-mono font-bold">${escapeHtml(it.code)}</td>
@@ -1814,8 +2048,10 @@
                                                         <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${st === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}">${escapeHtml(st)}</span>
                                                     </td>
                                                     <td class="p-3 border text-right space-x-2 whitespace-nowrap">
-                                                        <button onclick="openItemModal('${it.id}')" class="text-blue-600 font-bold">Edit</button>
-                                                        <button onclick="deleteRecord('items', '${it.id}')" class="text-rose-600 font-bold">Delete</button>
+                                                        ${canEdit ? `
+                                                            <button onclick="openItemModal('${it.id}')" class="text-blue-600 font-bold">Edit</button>
+                                                            <button onclick="deleteRecord('items', '${it.id}')" class="text-rose-600 font-bold">Delete</button>
+                                                        ` : `<span class="text-xs text-slate-400 font-semibold">View Only</span>`}
                                                     </td>
                                                 </tr>
                                             `;
@@ -1852,10 +2088,13 @@
         };
 
         window.toggleSelectAll = function(className, isChecked) {
-            document.querySelectorAll('.' + className).forEach(cb => cb.checked = isChecked);
+            document.querySelectorAll('.' + className).forEach(cb => {
+                if (!cb.disabled) cb.checked = isChecked;
+            });
         };
 
         window.deleteSelectedItems = async function() {
+            if (!requireEditPermission('master-items', 'delete items')) return;
             const checked = document.querySelectorAll('.item-checkbox:checked');
             if (checked.length === 0) return showToast('Please select at least one item!', 'warning');
             const ids = Array.from(checked).map(cb => cb.value);
@@ -1878,6 +2117,7 @@
         };
 
         window.openCategoryModal = function(id = null) {
+            if (!requireEditPermission('master-items', 'save categories')) return;
             const cat = id ? state.categories.find(c => c.id === id) : { id: 'CAT-' + Date.now(), name: '' };
             openModal({
                 title: id ? 'Edit Category' : 'Add Category',
@@ -1900,6 +2140,7 @@
         };
 
         window.openItemModal = function(id = null) {
+            if (!requireEditPermission('master-items', 'save items')) return;
             if (state.categories.length === 0) {
                 return showToast('Please create at least one category before adding items!', 'error');
             }
@@ -1983,8 +2224,17 @@
 
         // ==================== 6. BRANCHES & DESTINATIONS MASTER ====================
         function renderMasterLocationsView(container) {
+            const canEdit = canEditScreen('master-locations');
+
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
+                    ${!canEdit ? `
+                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
+                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
+                            <span>You have <strong>View Only</strong> permission on Branches &amp; Destinations. Adding, editing, or deleting is disabled.</span>
+                        </div>
+                    ` : ''}
+
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b">
                             <div>
@@ -1992,22 +2242,22 @@
                                 <p class="text-xs text-slate-500">Excel Format: [Sr | Branch ID / Code | Branch Name | Address]</p>
                             </div>
                             <div class="flex items-center gap-2">
-                                <button onclick="deleteSelectedBranches()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
+                                <button onclick="deleteSelectedBranches()" ${!canEdit ? 'disabled' : ''} class="px-3 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-700 text-white shadow-sm'} font-semibold rounded-xl text-xs flex items-center gap-1.5">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Selected
                                 </button>
-                                <button onclick="openBranchModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5">
+                                <button onclick="openBranchModal()" ${!canEdit ? 'disabled' : ''} class="px-4 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} font-semibold rounded-xl text-sm flex items-center gap-1.5">
                                     <i data-lucide="plus" class="w-4 h-4"></i> Add Branch
                                 </button>
-                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer flex items-center gap-1.5">
-                                    <i data-lucide="upload" class="w-4 h-4"></i> Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'branches')">
+                                <label class="px-4 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer'} font-semibold rounded-xl text-sm flex items-center gap-1.5">
+                                    <i data-lucide="upload" class="w-4 h-4"></i> Import Excel <input type="file" accept=".xlsx, .xls, .csv" ${!canEdit ? 'disabled' : ''} class="hidden" onchange="importExcelData(event, 'branches')">
                                 </label>
-                                ${state.branches.length > 0 ? `<button onclick="clearCollection('branches')" class="px-3 py-2 bg-rose-50 text-rose-600 font-semibold rounded-xl text-sm">Clear All</button>` : ''}
+                                ${state.branches.length > 0 && canEdit ? `<button onclick="clearCollection('branches')" class="px-3 py-2 bg-rose-50 text-rose-600 font-semibold rounded-xl text-sm">Clear All</button>` : ''}
                             </div>
                         </div>
                         <table class="w-full text-left text-sm border">
                             <thead>
                                 <tr class="bg-slate-100 font-bold text-xs">
-                                    <th class="p-3 border text-center w-10"><input type="checkbox" onchange="toggleSelectAll('branch-checkbox', this.checked)" class="rounded text-blue-600 w-4 h-4"></th>
+                                    <th class="p-3 border text-center w-10"><input type="checkbox" ${!canEdit ? 'disabled' : ''} onchange="toggleSelectAll('branch-checkbox', this.checked)" class="rounded text-blue-600 w-4 h-4"></th>
                                     <th class="p-3 border w-12">Sr</th>
                                     <th class="p-3 border">Branch ID (Code)</th>
                                     <th class="p-3 border">Branch Name</th>
@@ -2019,14 +2269,16 @@
                                 ${state.branches.length === 0 ? `<tr><td colspan="6" class="p-4 text-center text-slate-400">No branches configured. Add or import via Excel.</td></tr>` :
                                     state.branches.map((b, idx) => `
                                         <tr>
-                                            <td class="p-3 border text-center"><input type="checkbox" value="${b.id}" class="branch-checkbox rounded text-blue-600 w-4 h-4"></td>
+                                            <td class="p-3 border text-center"><input type="checkbox" value="${b.id}" ${!canEdit ? 'disabled' : ''} class="branch-checkbox rounded text-blue-600 w-4 h-4"></td>
                                             <td class="p-3 border text-slate-500 font-mono">${idx + 1}</td>
                                             <td class="p-3 border font-mono font-bold">${escapeHtml(b.code)}</td>
                                             <td class="p-3 border font-semibold">${escapeHtml(b.name)}</td>
                                             <td class="p-3 border">${escapeHtml(b.address || '-')}</td>
                                             <td class="p-3 border text-right space-x-2">
-                                                <button onclick="openBranchModal('${b.id}')" class="text-blue-600 font-bold">Edit</button>
-                                                <button onclick="deleteRecord('branches', '${b.id}')" class="text-rose-600 font-bold">Delete</button>
+                                                ${canEdit ? `
+                                                    <button onclick="openBranchModal('${b.id}')" class="text-blue-600 font-bold">Edit</button>
+                                                    <button onclick="deleteRecord('branches', '${b.id}')" class="text-rose-600 font-bold">Delete</button>
+                                                ` : `<span class="text-xs text-slate-400 font-semibold">View Only</span>`}
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -2041,22 +2293,22 @@
                                 <p class="text-xs text-slate-500">Excel Format: [Sr | Destination Name | Type]</p>
                             </div>
                             <div class="flex items-center gap-2">
-                                <button onclick="deleteSelectedDestinations()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
+                                <button onclick="deleteSelectedDestinations()" ${!canEdit ? 'disabled' : ''} class="px-3 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-700 text-white shadow-sm'} font-semibold rounded-xl text-xs flex items-center gap-1.5">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Selected
                                 </button>
-                                <button onclick="openDestinationModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5">
+                                <button onclick="openDestinationModal()" ${!canEdit ? 'disabled' : ''} class="px-4 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} font-semibold rounded-xl text-sm flex items-center gap-1.5">
                                     <i data-lucide="plus" class="w-4 h-4"></i> Add Destination
                                 </button>
-                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer flex items-center gap-1.5">
-                                    <i data-lucide="upload" class="w-4 h-4"></i> Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'destinations')">
+                                <label class="px-4 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer'} font-semibold rounded-xl text-sm flex items-center gap-1.5">
+                                    <i data-lucide="upload" class="w-4 h-4"></i> Import Excel <input type="file" accept=".xlsx, .xls, .csv" ${!canEdit ? 'disabled' : ''} class="hidden" onchange="importExcelData(event, 'destinations')">
                                 </label>
-                                ${state.destinations.length > 0 ? `<button onclick="clearCollection('destinations')" class="px-3 py-2 bg-rose-50 text-rose-600 font-semibold rounded-xl text-sm">Clear All</button>` : ''}
+                                ${state.destinations.length > 0 && canEdit ? `<button onclick="clearCollection('destinations')" class="px-3 py-2 bg-rose-50 text-rose-600 font-semibold rounded-xl text-sm">Clear All</button>` : ''}
                             </div>
                         </div>
                         <table class="w-full text-left text-sm border">
                             <thead>
                                 <tr class="bg-slate-100 font-bold text-xs">
-                                    <th class="p-3 border text-center w-10"><input type="checkbox" onchange="toggleSelectAll('dest-checkbox', this.checked)" class="rounded text-blue-600 w-4 h-4"></th>
+                                    <th class="p-3 border text-center w-10"><input type="checkbox" ${!canEdit ? 'disabled' : ''} onchange="toggleSelectAll('dest-checkbox', this.checked)" class="rounded text-blue-600 w-4 h-4"></th>
                                     <th class="p-3 border w-12">Sr</th>
                                     <th class="p-3 border">Destination ID</th>
                                     <th class="p-3 border">Destination Name</th>
@@ -2068,14 +2320,16 @@
                                 ${state.destinations.length === 0 ? `<tr><td colspan="6" class="p-4 text-center text-slate-400">No destinations configured. Add or import via Excel.</td></tr>` :
                                     state.destinations.map((d, idx) => `
                                         <tr>
-                                            <td class="p-3 border text-center"><input type="checkbox" value="${d.id}" class="dest-checkbox rounded text-blue-600 w-4 h-4"></td>
+                                            <td class="p-3 border text-center"><input type="checkbox" value="${d.id}" ${!canEdit ? 'disabled' : ''} class="dest-checkbox rounded text-blue-600 w-4 h-4"></td>
                                             <td class="p-3 border text-slate-500 font-mono">${idx + 1}</td>
                                             <td class="p-3 border font-mono">${escapeHtml(d.id)}</td>
                                             <td class="p-3 border font-semibold">${escapeHtml(d.name)}</td>
                                             <td class="p-3 border">${escapeHtml(d.type)}</td>
                                             <td class="p-3 border text-right space-x-2">
-                                                <button onclick="openDestinationModal('${d.id}')" class="text-blue-600 font-bold">Edit</button>
-                                                <button onclick="deleteRecord('destinations', '${d.id}')" class="text-rose-600 font-bold">Delete</button>
+                                                ${canEdit ? `
+                                                    <button onclick="openDestinationModal('${d.id}')" class="text-blue-600 font-bold">Edit</button>
+                                                    <button onclick="deleteRecord('destinations', '${d.id}')" class="text-rose-600 font-bold">Delete</button>
+                                                ` : `<span class="text-xs text-slate-400 font-semibold">View Only</span>`}
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -2087,6 +2341,7 @@
         }
 
         window.openBranchModal = function(id = null) {
+            if (!requireEditPermission('master-locations', 'save branches')) return;
             const b = id ? state.branches.find(x => x.id === id) : { id: 'BR-' + Date.now(), name: '', code: '', address: '' };
             openModal({
                 title: id ? 'Edit Branch' : 'Add Branch',
@@ -2111,6 +2366,7 @@
         };
 
         window.openDestinationModal = function(id = null) {
+            if (!requireEditPermission('master-locations', 'save destinations')) return;
             const d = id ? state.destinations.find(x => x.id === id) : { id: 'DST-' + Date.now(), name: '', type: 'Warehouse' };
             openModal({
                 title: id ? 'Edit Destination' : 'Add Destination',
@@ -2133,6 +2389,7 @@
         };
 
         window.deleteSelectedBranches = async function() {
+            if (!requireEditPermission('master-locations', 'delete branches')) return;
             const checked = document.querySelectorAll('.branch-checkbox:checked');
             if (checked.length === 0) return showToast('Please select at least one branch!', 'warning');
             const ids = Array.from(checked).map(cb => cb.value);
@@ -2155,6 +2412,7 @@
         };
 
         window.deleteSelectedDestinations = async function() {
+            if (!requireEditPermission('master-locations', 'delete destinations')) return;
             const checked = document.querySelectorAll('.dest-checkbox:checked');
             if (checked.length === 0) return showToast('Please select at least one destination!', 'warning');
             const ids = Array.from(checked).map(cb => cb.value);
@@ -2176,18 +2434,26 @@
             });
         };
 
-        // ==================== 7. USER MANAGEMENT & DYNAMIC ROLE PERMISSIONS ====================
+        // ==================== 7. USER MANAGEMENT & MULTI-ROLE + VIEW/EDIT PERMISSIONS ====================
         function renderMasterUsersView(container) {
+            const canEdit = canEditScreen('master-users');
             const totalScreens = getAllScreenIds().length;
 
             container.innerHTML = `
                 <div class="max-w-6xl mx-auto bg-white rounded-2xl p-6 shadow-sm border space-y-4">
+                    ${!canEdit ? `
+                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
+                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
+                            <span>You have <strong>View Only</strong> permission on User Accounts &amp; Roles. Creating or modifying user roles/permissions is disabled.</span>
+                        </div>
+                    ` : ''}
+
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                            <h3 class="font-bold text-lg">User Accounts &amp; Dynamic Menu Role Permissions</h3>
-                            <p class="text-xs text-slate-500">Automatically detects all ${SYSTEM_MENU_REGISTRY.length} menus and ${totalScreens} submenus so new screens appear here automatically.</p>
+                            <h3 class="font-bold text-lg">User Accounts, Multi-Roles &amp; Document Permissions</h3>
+                            <p class="text-xs text-slate-500">Assign multiple roles per user and configure <strong>View</strong> vs. <strong>Edit / Save</strong> per screen across ${totalScreens} submenus (auto-synced).</p>
                         </div>
-                        <button onclick="openUserModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5">
+                        <button onclick="openUserModal()" ${!canEdit ? 'disabled' : ''} class="px-4 py-2 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} font-semibold rounded-xl text-sm flex items-center gap-1.5">
                             <i data-lucide="user-plus" class="w-4 h-4"></i> Add New User
                         </button>
                     </div>
@@ -2197,9 +2463,9 @@
                                 <tr class="bg-slate-100 font-bold text-xs">
                                     <th class="p-3 border">Username</th>
                                     <th class="p-3 border">Full Name</th>
-                                    <th class="p-3 border">Role</th>
-                                    <th class="p-3 border">Assigned Branch / Dest</th>
-                                    <th class="p-3 border">Allowed Submenus</th>
+                                    <th class="p-3 border">Roles</th>
+                                    <th class="p-3 border">Branch / Dest</th>
+                                    <th class="p-3 border">Document Access (View / Edit)</th>
                                     <th class="p-3 border text-right">Actions</th>
                                 </tr>
                             </thead>
@@ -2208,19 +2474,30 @@
                                     const br = state.branches.find(b => b.id === u.branchId);
                                     const dst = state.destinations.find(d => d.id === u.destinationId);
                                     const assigned = br ? `Branch: ${br.name}` : (dst ? `Dest: ${dst.name}` : 'All / Global');
+                                    const rolesList = getUserRolesList(u);
                                     const perms = resolveUserPermissions(u);
-                                    const allowedCount = Object.values(perms).filter(Boolean).length;
+                                    const viewCount = Object.values(perms).filter(p => p.view).length;
+                                    const editCount = Object.values(perms).filter(p => p.view && p.edit).length;
 
                                     return `
                                         <tr>
                                             <td class="p-3 border font-mono font-bold">${escapeHtml(u.username)}</td>
                                             <td class="p-3 border font-semibold">${escapeHtml(u.fullName)}</td>
-                                            <td class="p-3 border"><span class="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold text-xs rounded">${escapeHtml(u.role)}</span></td>
+                                            <td class="p-3 border">
+                                                <div class="flex flex-wrap gap-1">
+                                                    ${rolesList.map(r => `<span class="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 font-bold text-[11px] rounded">${escapeHtml(r.replace('_', ' '))}</span>`).join('')}
+                                                </div>
+                                            </td>
                                             <td class="p-3 border text-xs text-slate-600">${escapeHtml(assigned)}</td>
-                                            <td class="p-3 border"><span class="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs font-bold">${allowedCount} / ${totalScreens} screens</span></td>
+                                            <td class="p-3 border text-xs">
+                                                <span class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-bold">${viewCount} View</span>
+                                                <span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded font-bold ml-1">${editCount} Edit/Save</span>
+                                            </td>
                                             <td class="p-3 border text-right space-x-2 whitespace-nowrap">
-                                                <button onclick="openUserModal('${u.id}')" class="text-blue-600 font-bold">Edit</button>
-                                                ${u.username !== 'admin' ? `<button onclick="deleteRecord('users', '${u.id}')" class="text-rose-600 font-bold">Delete</button>` : ''}
+                                                ${canEdit ? `
+                                                    <button onclick="openUserModal('${u.id}')" class="text-blue-600 font-bold">Edit</button>
+                                                    ${u.username !== 'admin' ? `<button onclick="deleteRecord('users', '${u.id}')" class="text-rose-600 font-bold">Delete</button>` : ''}
+                                                ` : `<span class="text-xs text-slate-400 font-semibold">View Only</span>`}
                                             </td>
                                         </tr>
                                     `;
@@ -2235,67 +2512,141 @@
         function renderPermissionMatrixHtml(userObj) {
             const perms = resolveUserPermissions(userObj);
             return SYSTEM_MENU_REGISTRY.map(group => {
-                const allGroupChecked = group.children.every(c => Boolean(perms[c.id]));
+                const allGroupView = group.children.every(c => Boolean(perms[c.id]?.view));
+                const allGroupEdit = group.children.every(c => Boolean(perms[c.id]?.edit));
+
                 return `
-                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                        <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
                             <span class="text-xs font-extrabold uppercase text-slate-800">${escapeHtml(group.label)}</span>
-                            <label class="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 cursor-pointer">
-                                <input type="checkbox" ${allGroupChecked ? 'checked' : ''} onchange="togglePermissionGroup('${group.id}', this.checked)" class="rounded text-indigo-600 w-3.5 h-3.5">
-                                <span>All in Menu</span>
-                            </label>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                            ${group.children.map(sub => `
-                                <label class="flex items-center gap-2 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 cursor-pointer">
-                                    <input type="checkbox" data-perm-screen="${sub.id}" data-perm-group="${group.id}" ${perms[sub.id] ? 'checked' : ''} class="rounded text-blue-600 w-3.5 h-3.5">
-                                    <span class="truncate">${escapeHtml(sub.label)}</span>
+                            <div class="flex items-center gap-3 text-[11px] font-bold">
+                                <label class="inline-flex items-center gap-1 text-slate-700 cursor-pointer">
+                                    <input type="checkbox" ${allGroupView ? 'checked' : ''} onchange="toggleGroupActionPermission('${group.id}', 'view', this.checked)" class="rounded text-blue-600 w-3.5 h-3.5">
+                                    <span>All View</span>
                                 </label>
-                            `).join('')}
+                                <label class="inline-flex items-center gap-1 text-emerald-700 cursor-pointer">
+                                    <input type="checkbox" ${allGroupEdit ? 'checked' : ''} onchange="toggleGroupActionPermission('${group.id}', 'edit', this.checked)" class="rounded text-emerald-600 w-3.5 h-3.5">
+                                    <span>All Edit/Save</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="space-y-1.5">
+                            ${group.children.map(sub => {
+                                const p = perms[sub.id] || { view: false, edit: false };
+                                return `
+                                    <div class="flex items-center justify-between gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs">
+                                        <span class="font-semibold text-slate-800 truncate">${escapeHtml(sub.label)}</span>
+                                        <div class="flex items-center gap-3 shrink-0 font-bold">
+                                            <label class="inline-flex items-center gap-1 text-slate-700 cursor-pointer">
+                                                <input type="checkbox" data-perm-screen="${sub.id}" data-perm-action="view" data-perm-group="${group.id}" ${p.view ? 'checked' : ''} onchange="onScreenViewPermissionChange('${sub.id}', this.checked)" class="rounded text-blue-600 w-3.5 h-3.5">
+                                                <span>View</span>
+                                            </label>
+                                            <label class="inline-flex items-center gap-1 text-emerald-700 cursor-pointer">
+                                                <input type="checkbox" data-perm-screen="${sub.id}" data-perm-action="edit" data-perm-group="${group.id}" ${p.view && p.edit ? 'checked' : ''} ${!p.view ? 'disabled' : ''} onchange="onScreenEditPermissionChange('${sub.id}', this.checked)" class="rounded text-emerald-600 w-3.5 h-3.5">
+                                                <span>Edit / Save</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
                         </div>
                     </div>
                 `;
             }).join('');
         }
 
-        window.togglePermissionGroup = function(groupId, checked) {
-            document.querySelectorAll(`input[data-perm-group="${groupId}"]`).forEach(cb => {
+        window.onScreenViewPermissionChange = function(screenId, canView) {
+            const editCb = document.querySelector(`input[data-perm-screen="${screenId}"][data-perm-action="edit"]`);
+            if (editCb) {
+                editCb.disabled = !canView;
+                if (!canView) editCb.checked = false;
+            }
+        };
+
+        window.onScreenEditPermissionChange = function(screenId, canEdit) {
+            if (!canEdit) return;
+            const viewCb = document.querySelector(`input[data-perm-screen="${screenId}"][data-perm-action="view"]`);
+            if (viewCb && !viewCb.checked) {
+                viewCb.checked = true;
+            }
+        };
+
+        window.toggleGroupActionPermission = function(groupId, action, checked) {
+            document.querySelectorAll(`input[data-perm-group="${groupId}"][data-perm-action="${action}"]`).forEach(cb => {
+                if (action === 'edit' && checked) {
+                    const screenId = cb.dataset.permScreen;
+                    const viewCb = document.querySelector(`input[data-perm-screen="${screenId}"][data-perm-action="view"]`);
+                    if (viewCb) viewCb.checked = true;
+                    cb.disabled = false;
+                }
                 cb.checked = checked;
+                if (action === 'view' && !checked) {
+                    const screenId = cb.dataset.permScreen;
+                    const editCb = document.querySelector(`input[data-perm-screen="${screenId}"][data-perm-action="edit"]`);
+                    if (editCb) {
+                        editCb.checked = false;
+                        editCb.disabled = true;
+                    }
+                }
             });
         };
 
-        window.applyRoleDefaultPermissions = function(role) {
-            const defaults = buildDefaultPermissionsForRole(role);
-            document.querySelectorAll('input[data-perm-screen]').forEach(cb => {
-                const screenId = cb.dataset.permScreen;
-                cb.checked = Boolean(defaults[screenId]);
+        window.applySelectedRolesPreset = function() {
+            const selectedRoles = Array.from(document.querySelectorAll('input[data-user-role-cb]:checked')).map(cb => cb.value);
+            const rolesToApply = selectedRoles.length > 0 ? selectedRoles : ['branch'];
+            const defaults = buildDefaultPermissionsForRoles(rolesToApply);
+
+            document.querySelectorAll('input[data-perm-screen][data-perm-action="view"]').forEach(viewCb => {
+                const screenId = viewCb.dataset.permScreen;
+                const def = defaults[screenId] || { view: false, edit: false };
+                viewCb.checked = Boolean(def.view);
+
+                const editCb = document.querySelector(`input[data-perm-screen="${screenId}"][data-perm-action="edit"]`);
+                if (editCb) {
+                    editCb.disabled = !def.view;
+                    editCb.checked = Boolean(def.view && def.edit);
+                }
             });
         };
 
         window.openUserModal = function(id = null) {
-            const u = id
-                ? { ...state.users.find(x => x.id === id) }
-                : { id: 'USR-' + Date.now(), username: '', passwordHash: '', fullName: '', role: 'branch', branchId: '', destinationId: '', permissions: buildDefaultPermissionsForRole('branch') };
+            if (!requireEditPermission('master-users', 'manage users and permissions')) return;
+            const existing = id ? state.users.find(x => x.id === id) : null;
+            const u = existing
+                ? { ...existing, roles: getUserRolesList(existing) }
+                : { id: 'USR-' + Date.now(), username: '', passwordHash: '', fullName: '', role: 'branch', roles: ['branch'], branchId: '', destinationId: '', permissions: buildDefaultPermissionsForRoles(['branch']) };
 
             openModal({
-                title: id ? 'Edit User & Menu Permissions' : 'Add User Account',
+                title: id ? 'Edit User, Multi-Roles & Permissions' : 'Add User Account',
                 bodyHtml: `
-                    <div class="space-y-3">
+                    <div class="space-y-4">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Username</label><input type="text" id="m-u-name" value="${escapeHtml(u.username)}" ${u.username === 'admin' ? 'readonly' : ''} class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
                             <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">${id ? 'New Password (optional)' : 'Password'}</label><input type="password" id="m-u-pass" placeholder="Enter password" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div><label class="block text-xs font-bold uppercase text-slate-500 mb-1">Full Name</label><input type="text" id="m-u-full" value="${escapeHtml(u.fullName)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold"></div>
-                            <div>
-                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Base Role Preset</label>
-                                <select id="m-u-role" onchange="applyRoleDefaultPermissions(this.value)" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
-                                    <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrator (Full Access)</option>
-                                    <option value="branch" ${u.role === 'branch' ? 'selected' : ''}>Branch User (Order Submission)</option>
-                                    <option value="factory_warehouse" ${u.role === 'factory_warehouse' ? 'selected' : ''}>Destination User (Matrix &amp; Challan)</option>
-                                </select>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Full Name</label>
+                            <input type="text" id="m-u-full" value="${escapeHtml(u.fullName)}" class="w-full px-3 py-2 border rounded-xl text-sm font-bold">
+                        </div>
+
+                        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs font-extrabold uppercase text-slate-700">Assigned Roles (Multiple Allowed)</label>
+                                <button type="button" onclick="applySelectedRolesPreset()" class="text-[11px] font-bold text-blue-600 hover:underline">Apply Preset from Selected Roles</button>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                ${ROLE_CATALOG.map(r => {
+                                    const checked = u.roles.includes(r.id);
+                                    return `
+                                        <label class="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 cursor-pointer">
+                                            <input type="checkbox" data-user-role-cb value="${r.id}" ${checked ? 'checked' : ''} class="rounded text-blue-600 w-4 h-4">
+                                            <span>${escapeHtml(r.label)}</span>
+                                        </label>
+                                    `;
+                                }).join('')}
                             </div>
                         </div>
+
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Restrict Branch (Optional)</label>
@@ -2312,8 +2663,9 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="space-y-2 pt-1">
-                            <label class="block text-xs font-bold uppercase text-slate-500">Menu &amp; Submenu Permissions (Auto-Synced)</label>
+
+                        <div class="space-y-2">
+                            <label class="block text-xs font-bold uppercase text-slate-500">Menu &amp; Submenu Document Permissions (View vs. Edit / Save)</label>
                             ${renderPermissionMatrixHtml(u)}
                         </div>
                     </div>
@@ -2324,9 +2676,21 @@
                     if (!newUsername) return showToast('Username is required!', 'error');
                     if (!id && !rawPass) return showToast('Password is required for new users!', 'error');
 
+                    let selectedRoles = Array.from(document.querySelectorAll('input[data-user-role-cb]:checked')).map(cb => cb.value);
+                    if (u.username === 'admin' && !selectedRoles.includes('admin')) {
+                        selectedRoles.unshift('admin');
+                    }
+                    if (selectedRoles.length === 0) {
+                        return showToast('Please select at least one role for the user!', 'error');
+                    }
+
                     const collectedPerms = {};
-                    document.querySelectorAll('input[data-perm-screen]').forEach(cb => {
-                        collectedPerms[cb.dataset.permScreen] = cb.checked;
+                    getAllScreenIds().forEach(screenId => {
+                        const viewCb = document.querySelector(`input[data-perm-screen="${screenId}"][data-perm-action="view"]`);
+                        const editCb = document.querySelector(`input[data-perm-screen="${screenId}"][data-perm-action="edit"]`);
+                        const canView = Boolean(viewCb?.checked);
+                        const canEdit = canView && Boolean(editCb?.checked);
+                        collectedPerms[screenId] = { view: canView, edit: canEdit };
                     });
 
                     u.username = newUsername;
@@ -2335,7 +2699,8 @@
                         delete u.password;
                     }
                     u.fullName = document.getElementById('m-u-full').value.trim() || newUsername;
-                    u.role = document.getElementById('m-u-role').value;
+                    u.roles = selectedRoles;
+                    u.role = selectedRoles[0];
                     u.branchId = document.getElementById('m-u-branch').value;
                     u.destinationId = document.getElementById('m-u-dest').value;
                     u.permissions = collectedPerms;
@@ -2345,27 +2710,37 @@
                     if (currentUser && currentUser.id === u.id) {
                         currentUser = { ...u };
                         sessionStorage.setItem('kty_active_user', JSON.stringify(currentUser));
+                        updateHeaderUserDisplay(currentUser);
                         renderSidebarMenu();
                     }
 
                     closeModal();
                     renderCurrentRoute();
-                    showToast('User & menu permissions saved successfully!');
+                    showToast('User roles & document permissions saved successfully!');
                 }
             });
         };
 
-        // ==================== 8. COMPANY & SYSTEM SETTINGS (ADMIN) ====================
+        // ==================== 8. COMPANY & SYSTEM SETTINGS ====================
         function renderSystemSettingsView(container) {
+            const canEdit = canEditScreen('system-settings');
             const s = state.settings || DEFAULT_SETTINGS;
+
             container.innerHTML = `
                 <div class="max-w-3xl mx-auto bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-200 space-y-6">
+                    ${!canEdit ? `
+                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
+                            <i data-lucide="eye" class="w-4 h-4 text-amber-600 shrink-0"></i>
+                            <span>You have <strong>View Only</strong> permission on Company &amp; System Information. Saving changes is disabled.</span>
+                        </div>
+                    ` : ''}
+
                     <div class="flex items-center justify-between border-b pb-4">
                         <div>
                             <h3 class="text-lg font-bold text-slate-900">Company Profile &amp; Software Branding</h3>
                             <p class="text-xs text-slate-500">Displayed on the Login Screen, Navigation Sidebar, and Delivery Challans</p>
                         </div>
-                        <button onclick="saveSystemSettings()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md flex items-center gap-2">
+                        <button onclick="saveSystemSettings()" ${!canEdit ? 'disabled' : ''} class="px-5 py-2.5 ${!canEdit ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md'} font-semibold rounded-xl text-sm flex items-center gap-2">
                             <i data-lucide="save" class="w-4 h-4"></i> Save Settings
                         </button>
                     </div>
@@ -2378,10 +2753,10 @@
                             <div class="font-bold text-sm text-slate-800">Company Logo</div>
                             <p class="text-xs text-slate-500">Upload a PNG, JPG, or SVG logo (max 500KB recommended for fast Firestore sync).</p>
                             <div class="flex flex-wrap justify-center sm:justify-start gap-2 pt-1">
-                                <label class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs cursor-pointer transition">
-                                    Upload Logo <input type="file" accept="image/*" class="hidden" onchange="handleLogoUpload(event)">
+                                <label class="px-4 py-2 ${!canEdit ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'} font-semibold rounded-xl text-xs transition">
+                                    Upload Logo <input type="file" accept="image/*" ${!canEdit ? 'disabled' : ''} class="hidden" onchange="handleLogoUpload(event)">
                                 </label>
-                                ${s.logoDataUrl ? `<button type="button" onclick="removeCompanyLogo()" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold rounded-xl text-xs">Remove Logo</button>` : ''}
+                                ${s.logoDataUrl && canEdit ? `<button type="button" onclick="removeCompanyLogo()" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold rounded-xl text-xs">Remove Logo</button>` : ''}
                             </div>
                         </div>
                     </div>
@@ -2389,31 +2764,31 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Software Title</label>
-                            <input type="text" id="set-software-name" value="${escapeHtml(s.softwareName)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                            <input type="text" id="set-software-name" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.softwareName)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
                         </div>
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Company Name</label>
-                            <input type="text" id="set-company-name" value="${escapeHtml(s.companyName)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                            <input type="text" id="set-company-name" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.companyName)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
                         </div>
                         <div class="sm:col-span-2">
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tagline / Subtitle</label>
-                            <input type="text" id="set-tagline" value="${escapeHtml(s.tagline)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
+                            <input type="text" id="set-tagline" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.tagline)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
                         </div>
                         <div class="sm:col-span-2">
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Company Address</label>
-                            <input type="text" id="set-address" value="${escapeHtml(s.address)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
+                            <input type="text" id="set-address" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.address)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
                         </div>
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Contact Phone</label>
-                            <input type="text" id="set-phone" value="${escapeHtml(s.phone)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
+                            <input type="text" id="set-phone" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.phone)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
                         </div>
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Contact Email / Website</label>
-                            <input type="text" id="set-email" value="${escapeHtml(s.email)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
+                            <input type="text" id="set-email" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.email)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
                         </div>
                         <div class="sm:col-span-2">
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">CR / VAT / Registration Info (Optional)</label>
-                            <input type="text" id="set-tax" value="${escapeHtml(s.taxId)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
+                            <input type="text" id="set-tax" ${!canEdit ? 'disabled' : ''} value="${escapeHtml(s.taxId)}" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-medium">
                         </div>
                     </div>
                 </div>
@@ -2421,6 +2796,7 @@
         }
 
         window.handleLogoUpload = function(event) {
+            if (!requireEditPermission('system-settings', 'upload company logo')) return;
             const file = event.target.files[0];
             if (!file) return;
             if (file.size > 800 * 1024) {
@@ -2437,15 +2813,14 @@
         };
 
         window.removeCompanyLogo = function() {
+            if (!requireEditPermission('system-settings', 'remove company logo')) return;
             state.settings.logoDataUrl = '';
             renderSystemSettingsView(document.getElementById('main-content'));
             lucide.createIcons();
         };
 
         window.saveSystemSettings = async function() {
-            if (currentUser?.role !== 'admin') {
-                return showToast('Permission denied: Administrator access required.', 'error');
-            }
+            if (!requireEditPermission('system-settings', 'save company settings')) return;
 
             state.settings = {
                 id: 'MAIN_SETTINGS',
@@ -2467,6 +2842,7 @@
         };
 
         window.deleteRecord = async function(colName, id) {
+            if (!requireEditPermission(currentRoute, `delete from ${colName}`)) return;
             openModal({
                 title: 'Confirm Deletion',
                 bodyHtml: '<p>Are you sure you want to delete this record?</p>',
@@ -2501,6 +2877,7 @@
         }
 
         window.importExcelData = async function(event, colName) {
+            if (!requireEditPermission(currentRoute, `import ${colName}`)) return;
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
