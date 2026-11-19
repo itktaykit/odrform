@@ -43,19 +43,40 @@
             outline-offset: -2px;
         }
 
+        .challan-sheet {
+            break-after: page;
+            page-break-after: always;
+        }
+        .challan-sheet:last-child {
+            break-after: auto;
+            page-break-after: auto;
+        }
+
         @media print {
             body * { visibility: hidden !important; }
             #printable-challan, #printable-challan * { visibility: visible !important; }
             #printable-challan {
-                position: fixed !important;
+                position: static !important;
                 left: 0 !important;
                 top: 0 !important;
                 width: 100% !important;
                 margin: 0 !important;
-                padding: 16px !important;
+                padding: 0 !important;
                 box-shadow: none !important;
                 border: none !important;
                 background: white !important;
+            }
+            .challan-sheet {
+                box-shadow: none !important;
+                border: 1px solid #cbd5e1 !important;
+                margin-bottom: 0 !important;
+                padding: 20px !important;
+                break-after: page !important;
+                page-break-after: always !important;
+            }
+            .challan-sheet:last-child {
+                break-after: auto !important;
+                page-break-after: auto !important;
             }
             .no-print { display: none !important; }
         }
@@ -628,8 +649,8 @@
             const titles = {
                 'order-form': ['Stock Transfer Order Form', 'Submit branch stock requests to factory or warehouse'],
                 'my-orders': ['Branch Order History', 'View and track submitted stock transfer requests'],
-                'order-matrix': ['Consolidated Order Matrix', 'Double-click any cell to edit branch quantities (Enter or Tab to save)'],
-                'delivery-challan': ['Delivery Challan & Print', 'Generate and print branch dispatch notes'],
+                'order-matrix': ['Consolidated Order Matrix', 'Review submitted orders by date, edit quantities inline, and execute challans'],
+                'delivery-challan': ['Delivery Challan & Print', 'Select multiple branches to print delivery challans one after another'],
                 'master-items': ['Categories & Item Master', 'Manage product categories, codes, and units'],
                 'master-locations': ['Branches & Destinations', 'Configure restaurant branches and supply warehouses'],
                 'master-users': ['User Accounts & Roles', 'Manage system credentials and access permissions'],
@@ -677,9 +698,15 @@
                                 ${orderFormState.isActive ? '● Form Active (Ready)' : '○ Locked (Click Add)'}
                             </span>
                             <div class="flex gap-2">
-                                <button onclick="activateOrderForm()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm">Add</button>
-                                <button onclick="cancelOrderForm()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-sm">Cancel</button>
-                                <button onclick="saveOrderForm()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md">Save & Submit</button>
+                                <button onclick="activateOrderForm()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5 shadow-sm transition">
+                                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Add
+                                </button>
+                                <button onclick="cancelOrderForm()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
+                                    <i data-lucide="x-circle" class="w-4 h-4"></i> Cancel
+                                </button>
+                                <button onclick="saveOrderForm()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md flex items-center gap-1.5 transition">
+                                    <i data-lucide="send" class="w-4 h-4"></i> Save & Submit
+                                </button>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -720,8 +747,12 @@
                                     ${cats.map((c, i) => `<option value="${i}" ${i === orderFormState.catIdx ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
                                 </select>
                                 <div class="flex gap-2">
-                                    <button onclick="changeCat(-1)" class="px-3 py-1.5 bg-white border rounded-lg text-sm font-bold">Previous</button>
-                                    <button onclick="changeCat(1)" class="px-3 py-1.5 bg-white border rounded-lg text-sm font-bold">Next</button>
+                                    <button onclick="changeCat(-1)" class="px-3 py-1.5 bg-white border hover:bg-slate-100 rounded-lg text-sm font-bold flex items-center gap-1 transition">
+                                        <i data-lucide="chevron-left" class="w-4 h-4"></i> Previous
+                                    </button>
+                                    <button onclick="changeCat(1)" class="px-3 py-1.5 bg-white border hover:bg-slate-100 rounded-lg text-sm font-bold flex items-center gap-1 transition">
+                                        Next <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                                    </button>
                                 </div>
                             </div>
 
@@ -855,6 +886,9 @@
                                 ${visibleOrders.length === 0 ? `<tr><td colspan="7" class="p-6 text-center text-slate-400">No orders submitted yet.</td></tr>` : 
                                     visibleOrders.map(o => {
                                         const itemCount = Object.values(o.quantities || {}).filter(v => v > 0).length;
+                                        const badgeClass = o.status === 'Executed for Challan'
+                                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200';
                                         return `
                                             <tr>
                                                 <td class="p-3 border font-mono font-bold">${escapeHtml(o.id)}</td>
@@ -862,9 +896,11 @@
                                                 <td class="p-3 border">${escapeHtml(o.destinationName)}</td>
                                                 <td class="p-3 border">${escapeHtml(o.deliveryDate)}</td>
                                                 <td class="p-3 border font-bold">${itemCount} items</td>
-                                                <td class="p-3 border"><span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold rounded text-xs">${escapeHtml(o.status)}</span></td>
+                                                <td class="p-3 border"><span class="px-2.5 py-0.5 ${badgeClass} font-bold rounded-full text-xs">${escapeHtml(o.status)}</span></td>
                                                 <td class="p-3 border text-right">
-                                                    <button onclick="viewOrderDetails('${o.id}')" class="text-blue-600 hover:underline font-bold text-xs">View Items</button>
+                                                    <button onclick="viewOrderDetails('${o.id}')" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-bold text-xs">
+                                                        <i data-lucide="eye" class="w-3.5 h-3.5"></i> View Items
+                                                    </button>
                                                 </td>
                                             </tr>
                                         `;
@@ -911,6 +947,16 @@
         let matrixFilterDate = TOMORROW;
         let matrixFilterCatId = 'ALL';
 
+        function getSubmittedDateOrders(targetDate, destFilter = null) {
+            return state.orders.filter(o => {
+                const hasOrderId = Boolean(o && typeof o.id === 'string' && o.id.trim() !== '');
+                const dateMatch = targetDate ? o.deliveryDate === targetDate : true;
+                const destMatch = destFilter ? o.destinationId === destFilter : true;
+                const hasItems = Object.values(o.quantities || {}).some(q => Number(q) > 0);
+                return hasOrderId && dateMatch && destMatch && hasItems;
+            });
+        }
+
         function renderOrderMatrixView(container) {
             const canEditMatrix = currentUser && (currentUser.role === 'admin' || currentUser.role === 'factory_warehouse');
 
@@ -918,40 +964,53 @@
                 ? state.items
                 : state.items.filter(it => it.categoryId === matrixFilterCatId);
 
-            const dateOrders = state.orders.filter(o => {
-                const dateMatch = !matrixFilterDate || o.deliveryDate === matrixFilterDate;
-                const destMatch = (currentUser?.role === 'factory_warehouse' && currentUser.destinationId)
-                    ? o.destinationId === currentUser.destinationId
-                    : true;
-                return dateMatch && destMatch;
-            });
+            const destFilter = (currentUser?.role === 'factory_warehouse' && currentUser.destinationId)
+                ? currentUser.destinationId
+                : null;
+
+            const dateOrders = getSubmittedDateOrders(matrixFilterDate, destFilter);
+
+            // Only include branches that have a submitted order on the chosen date
+            const activeBranches = state.branches.filter(b =>
+                dateOrders.some(o => o.branchId === b.id)
+            );
 
             container.innerHTML = `
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
                     <div class="flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-slate-200">
                         <div class="flex flex-wrap items-end gap-4">
                             <div>
-                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Delivery Date Filter</label>
-                                <input type="date" id="matrix-date-filter" value="${matrixFilterDate}" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none">
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Delivery Date</label>
+                                <input type="date" id="matrix-date-filter" value="${matrixFilterDate}" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-600 outline-none">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Category Filter</label>
-                                <select id="matrix-cat-filter" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none min-w-[200px]">
+                                <select id="matrix-cat-filter" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-600 outline-none min-w-[200px]">
                                     <option value="ALL">-- All Categories --</option>
                                     ${state.categories.map(c => `<option value="${c.id}" ${c.id === matrixFilterCatId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
                                 </select>
                             </div>
                         </div>
 
-                        <div class="flex items-center gap-2">
-                            <span class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-xs font-semibold flex items-center gap-1.5">
-                                <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i>
-                                Double-click any branch cell to edit • Press Enter or Tab to save
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="px-3 py-1.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5">
+                                <i data-lucide="calendar-check" class="w-3.5 h-3.5 text-indigo-600"></i>
+                                ${activeBranches.length} Submitted Branch${activeBranches.length === 1 ? '' : 'es'}
                             </span>
-                            <button onclick="exportMatrixToExcel()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
+                            <button onclick="exportMatrixToExcel()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
                                 <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export Excel
                             </button>
+                            <button onclick="executeOrdersToChallan()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/25 transition">
+                                <i data-lucide="play-circle" class="w-4 h-4"></i> Execute to Delivery Challan
+                            </button>
                         </div>
+                    </div>
+
+                    <div class="flex items-center justify-between bg-indigo-50/70 border border-indigo-100 px-4 py-2.5 rounded-xl text-xs text-indigo-900">
+                        <span class="flex items-center gap-1.5 font-medium">
+                            <i data-lucide="mouse-pointer-click" class="w-4 h-4 text-indigo-600 shrink-0"></i>
+                            Showing only branches with submitted orders for <strong>${escapeHtml(matrixFilterDate || 'selected date')}</strong>. Double-click any branch cell to edit (Enter or Tab to save).
+                        </span>
                     </div>
 
                     <div class="overflow-x-auto rounded-xl border border-slate-300 shadow-inner">
@@ -962,26 +1021,36 @@
                                     <th class="py-3 px-3 bg-slate-200">Item Code</th>
                                     <th class="py-3 px-4 bg-slate-200">Item Name</th>
                                     <th class="py-3 px-3 text-center bg-slate-200">Units</th>
-                                    ${state.branches.map(b => `
-                                        <th class="py-3 px-4 text-center bg-slate-100 text-slate-900 min-w-[115px]">
-                                            ${escapeHtml(b.name)}
-                                        </th>
-                                    `).join('')}
-                                    <th class="py-3 px-4 text-center bg-blue-100 text-blue-900 font-extrabold min-w-[120px]">
+                                    ${activeBranches.map(b => {
+                                        const ord = dateOrders.find(o => o.branchId === b.id);
+                                        return `
+                                            <th class="py-3 px-4 text-center bg-slate-100 text-slate-900 min-w-[130px]">
+                                                <div>${escapeHtml(b.name)}</div>
+                                                <div class="text-[10px] font-mono font-semibold text-indigo-600 mt-0.5">${escapeHtml(ord?.id || '')}</div>
+                                            </th>
+                                        `;
+                                    }).join('')}
+                                    <th class="py-3 px-4 text-center bg-indigo-100 text-indigo-900 font-extrabold min-w-[120px]">
                                         Total Order
                                     </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-300 bg-white">
-                                ${displayedItems.length === 0 ? `
+                                ${activeBranches.length === 0 ? `
                                     <tr>
-                                        <td colspan="${5 + state.branches.length}" class="p-8 text-center text-slate-400">
+                                        <td colspan="6" class="p-10 text-center text-slate-400 font-medium">
+                                            No branch orders with an Order ID were submitted for <strong>${escapeHtml(matrixFilterDate || 'this date')}</strong>.
+                                        </td>
+                                    </tr>
+                                ` : displayedItems.length === 0 ? `
+                                    <tr>
+                                        <td colspan="${5 + activeBranches.length}" class="p-8 text-center text-slate-400">
                                             No items found for the selected category.
                                         </td>
                                     </tr>
                                 ` : displayedItems.map((it, idx) => {
                                     let rowTotal = 0;
-                                    const branchCells = state.branches.map((b, bIdx) => {
+                                    const branchCells = activeBranches.map((b, bIdx) => {
                                         const branchOrders = dateOrders.filter(o => o.branchId === b.id);
                                         const q = branchOrders.reduce((sum, ord) => sum + (Number(ord?.quantities?.[it.id]) || 0), 0);
                                         rowTotal += q;
@@ -993,7 +1062,7 @@
                                                 data-item-id="${it.id}" 
                                                 data-branch-id="${b.id}"
                                                 ${canEditMatrix ? `ondblclick="startMatrixCellEdit(this)"` : ''}
-                                                class="py-2.5 px-3 text-center font-bold ${q > 0 ? 'text-slate-900 bg-emerald-50/30' : 'text-slate-400'} ${canEditMatrix ? 'excel-cell-editable' : ''}"
+                                                class="py-2.5 px-3 text-center font-bold ${q > 0 ? 'text-slate-900 bg-emerald-50/40' : 'text-slate-400'} ${canEditMatrix ? 'excel-cell-editable' : ''}"
                                                 title="${canEditMatrix ? 'Double-click to edit quantity' : ''}"
                                             >${q > 0 ? q : 0}</td>
                                         `;
@@ -1006,7 +1075,7 @@
                                             <td class="py-2.5 px-4 font-semibold text-slate-900">${escapeHtml(it.name)}</td>
                                             <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs font-bold text-slate-600">${escapeHtml(it.unit)}</span></td>
                                             ${branchCells}
-                                            <td id="matrix-row-total-${it.id}" class="py-2.5 px-4 text-center font-black bg-blue-50/70 text-blue-800">
+                                            <td id="matrix-row-total-${it.id}" class="py-2.5 px-4 text-center font-black bg-indigo-50/70 text-indigo-800">
                                                 ${rowTotal}
                                             </td>
                                         </tr>
@@ -1027,6 +1096,31 @@
                 renderOrderMatrixView(container);
             };
         }
+
+        window.executeOrdersToChallan = async function() {
+            const destFilter = (currentUser?.role === 'factory_warehouse' && currentUser.destinationId)
+                ? currentUser.destinationId
+                : null;
+            const dateOrders = getSubmittedDateOrders(matrixFilterDate, destFilter);
+
+            if (dateOrders.length === 0) {
+                return showToast('No submitted orders found for this delivery date to execute.', 'warning');
+            }
+
+            const submittedBranchIds = [...new Set(dateOrders.map(o => o.branchId))];
+
+            for (const ord of dateOrders) {
+                ord.status = 'Executed for Challan';
+                ord.executedAt = new Date().toISOString();
+                await dbSaveRecord('orders', ord);
+            }
+
+            challanDate = matrixFilterDate || TODAY;
+            challanSelectedBranchIds = submittedBranchIds;
+
+            showToast(`Executed ${dateOrders.length} order(s) for Delivery Challan!`, 'success');
+            navigateTo('delivery-challan');
+        };
 
         window.startMatrixCellEdit = function(td) {
             if (td.classList.contains('excel-cell-editing')) return;
@@ -1055,9 +1149,9 @@
                 td.textContent = newVal;
                 if (newVal > 0) {
                     td.classList.remove('text-slate-400');
-                    td.classList.add('text-slate-900', 'bg-emerald-50/30');
+                    td.classList.add('text-slate-900', 'bg-emerald-50/40');
                 } else {
-                    td.classList.remove('text-slate-900', 'bg-emerald-50/30');
+                    td.classList.remove('text-slate-900', 'bg-emerald-50/40');
                     td.classList.add('text-slate-400');
                 }
 
@@ -1072,7 +1166,7 @@
                 if (totalCell) totalCell.textContent = sum;
 
                 if (moveNext) {
-                    const totalCols = state.branches.length;
+                    const totalCols = document.querySelectorAll(`th[data-matrix-branch="true"]`).length || 1;
                     let nextRow = rowIdx;
                     let nextCol = reverse ? colIdx - 1 : colIdx + 1;
 
@@ -1164,109 +1258,187 @@
             XLSX.writeFile(wb, `Consolidated_Order_Matrix_${matrixFilterDate || 'All'}.xlsx`);
         };
 
-        // ==================== 4. DELIVERY CHALLAN & PRINT ====================
-        let challanBranchId = '';
+        // ==================== 4. DELIVERY CHALLAN & MULTI-BRANCH PRINT ====================
+        let challanSelectedBranchIds = [];
         let challanDate = TOMORROW;
+
+        function buildBranchChallanCard(branch, dateOrders, settings, index, totalCount) {
+            const branchOrders = dateOrders.filter(o => o.branchId === branch.id);
+            const orderIdsText = branchOrders.map(o => o.id).filter(Boolean).join(', ') || 'N/A';
+
+            let rowIndex = 0;
+            const rowsHtml = state.items.map(it => {
+                const totalQty = branchOrders.reduce((sum, ord) => sum + (Number(ord?.quantities?.[it.id]) || 0), 0);
+                if (totalQty === 0) return '';
+                rowIndex++;
+                return `
+                    <tr>
+                        <td class="p-2.5 border text-slate-500 font-mono">${rowIndex}</td>
+                        <td class="p-2.5 border font-mono">${escapeHtml(it.code)}</td>
+                        <td class="p-2.5 border font-semibold">${escapeHtml(it.name)}</td>
+                        <td class="p-2.5 border">${escapeHtml(it.unit)}</td>
+                        <td class="p-2.5 border text-right font-bold">${totalQty}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            return `
+                <div class="challan-sheet bg-white rounded-2xl shadow-sm border border-slate-200 p-8 space-y-6">
+                    <div class="flex justify-between items-start border-b pb-5">
+                        <div class="flex items-center gap-4">
+                            ${settings.logoDataUrl ? `<img src="${settings.logoDataUrl}" class="w-16 h-16 object-contain rounded-lg border p-1">` : ''}
+                            <div>
+                                <h1 class="text-xl font-extrabold text-slate-900">${escapeHtml(settings.companyName)}</h1>
+                                <p class="text-xs text-slate-500">${escapeHtml(settings.address)}</p>
+                                <p class="text-xs text-slate-500">${escapeHtml([settings.phone, settings.email].filter(Boolean).join(' | '))}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="inline-block px-2.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-[11px] font-bold mb-1">
+                                Challan ${index + 1} of ${totalCount}
+                            </div>
+                            <h2 class="text-xl font-black text-indigo-700">DELIVERY CHALLAN</h2>
+                            <p class="text-xs text-slate-600 mt-1"><strong>Dispatch Date:</strong> ${escapeHtml(challanDate)}</p>
+                            <p class="text-xs text-slate-600"><strong>Branch:</strong> ${escapeHtml(branch.name)}</p>
+                            <p class="text-xs text-slate-500 font-mono"><strong>Order Ref:</strong> ${escapeHtml(orderIdsText)}</p>
+                        </div>
+                    </div>
+
+                    <table class="w-full text-left text-sm border">
+                        <thead>
+                            <tr class="bg-slate-100 font-bold text-xs">
+                                <th class="p-2.5 border">Sr</th>
+                                <th class="p-2.5 border">Code</th>
+                                <th class="p-2.5 border">Item Name</th>
+                                <th class="p-2.5 border">Unit</th>
+                                <th class="p-2.5 border text-right">Dispatched Qty</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml || `<tr><td colspan="5" class="p-6 text-center text-slate-400">No items scheduled for dispatch to ${escapeHtml(branch.name)} on this date.</td></tr>`}
+                        </tbody>
+                    </table>
+
+                    <div class="pt-10 grid grid-cols-3 gap-6 text-center text-xs text-slate-600">
+                        <div class="border-t border-slate-400 pt-2">Prepared By</div>
+                        <div class="border-t border-slate-400 pt-2">Driver / Dispatch Officer</div>
+                        <div class="border-t border-slate-400 pt-2">Received By (${escapeHtml(branch.name)} Stamp)</div>
+                    </div>
+                </div>
+            `;
+        }
 
         function renderDeliveryChallanView(container) {
             const s = state.settings || DEFAULT_SETTINGS;
-            const filteredOrders = state.orders.filter(o => {
-                let matchBranch = !challanBranchId || o.branchId === challanBranchId;
-                let matchDate = !challanDate || o.deliveryDate === challanDate;
-                return matchBranch && matchDate;
-            });
+            const dateOrders = getSubmittedDateOrders(challanDate, null);
+
+            const branchesToRender = challanSelectedBranchIds.length > 0
+                ? state.branches.filter(b => challanSelectedBranchIds.includes(b.id))
+                : state.branches;
+
+            const allSelected = state.branches.length > 0 && challanSelectedBranchIds.length === state.branches.length;
 
             container.innerHTML = `
-                <div class="max-w-4xl mx-auto space-y-6">
-                    <div class="no-print bg-white rounded-2xl p-6 shadow-sm border flex flex-wrap gap-4 items-end">
-                        <div>
-                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Select Branch</label>
-                            <select id="challan-branch" class="px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold w-60">
-                                <option value="">-- All Branches --</option>
-                                ${state.branches.map(b => `<option value="${b.id}" ${b.id === challanBranchId ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Delivery Date</label>
-                            <input type="date" id="challan-date" value="${challanDate}" class="px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold">
-                        </div>
-                        <button onclick="window.print()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md flex items-center gap-2">
-                            <i data-lucide="printer" class="w-4 h-4"></i> Print Challan
-                        </button>
-                    </div>
+                <div class="max-w-5xl mx-auto space-y-6">
+                    <div class="no-print bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-5">
+                        <div class="flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-slate-100">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Delivery Date</label>
+                                <input type="date" id="challan-date" value="${challanDate}" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-600 outline-none">
+                            </div>
 
-                    <div class="bg-white rounded-2xl shadow-sm border p-8 space-y-6" id="printable-challan">
-                        <div class="flex justify-between items-start border-b pb-5">
-                            <div class="flex items-center gap-4">
-                                ${s.logoDataUrl ? `<img src="${s.logoDataUrl}" class="w-16 h-16 object-contain rounded-lg border p-1">` : ''}
-                                <div>
-                                    <h1 class="text-xl font-extrabold text-slate-900">${escapeHtml(s.companyName)}</h1>
-                                    <p class="text-xs text-slate-500">${escapeHtml(s.address)}</p>
-                                    <p class="text-xs text-slate-500">${escapeHtml([s.phone, s.email].filter(Boolean).join(' | '))}</p>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button onclick="printChallansOneAfterAnother()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm shadow-md shadow-indigo-600/25 flex items-center gap-2 transition">
+                                    <i data-lucide="printer" class="w-4 h-4"></i> Print Selected One-by-One (${branchesToRender.length})
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2.5">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <label class="text-xs font-bold uppercase text-slate-600 flex items-center gap-1.5">
+                                    <i data-lucide="list-checks" class="w-4 h-4 text-indigo-600"></i>
+                                    Select Branches to Print Sequentially
+                                </label>
+                                <div class="flex items-center gap-2 text-xs font-semibold">
+                                    <button onclick="toggleAllChallanBranches(true)" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg flex items-center gap-1 transition">
+                                        <i data-lucide="check-square" class="w-3.5 h-3.5"></i> Select All
+                                    </button>
+                                    <button onclick="toggleAllChallanBranches(false)" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg flex items-center gap-1 transition">
+                                        <i data-lucide="square" class="w-3.5 h-3.5"></i> Clear Selection
+                                    </button>
                                 </div>
                             </div>
-                            <div class="text-right">
-                                <h2 class="text-xl font-black text-blue-700">DELIVERY CHALLAN</h2>
-                                <p class="text-xs text-slate-600 mt-1"><strong>Dispatch Date:</strong> ${escapeHtml(challanDate)}</p>
-                                <p class="text-xs text-slate-600"><strong>Branch:</strong> ${escapeHtml(challanBranchId ? (state.branches.find(b=>b.id===challanBranchId)?.name || '') : 'All Branches')}</p>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 p-3.5 bg-slate-50 border border-slate-200 rounded-xl max-h-48 overflow-y-auto">
+                                ${state.branches.length === 0 ? `
+                                    <p class="text-xs text-slate-400 col-span-full text-center py-2">No branches available.</p>
+                                ` : state.branches.map(b => {
+                                    const isChecked = challanSelectedBranchIds.includes(b.id);
+                                    const hasOrder = dateOrders.some(o => o.branchId === b.id);
+                                    return `
+                                        <label class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border cursor-pointer transition ${isChecked ? 'bg-indigo-50 border-indigo-300 text-indigo-950' : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'}">
+                                            <span class="flex items-center gap-2 min-w-0">
+                                                <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="onChallanBranchToggle('${b.id}', this.checked)" class="rounded text-indigo-600 w-4 h-4 shrink-0">
+                                                <span class="text-xs font-bold truncate">${escapeHtml(b.name)}</span>
+                                            </span>
+                                            <span class="px-1.5 py-0.5 text-[10px] font-bold rounded ${hasOrder ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'} shrink-0">
+                                                ${hasOrder ? 'Ordered' : 'No Order'}
+                                            </span>
+                                        </label>
+                                    `;
+                                }).join('')}
                             </div>
                         </div>
+                    </div>
 
-                        <table class="w-full text-left text-sm border">
-                            <thead>
-                                <tr class="bg-slate-100 font-bold text-xs">
-                                    <th class="p-2.5 border">Sr</th>
-                                    <th class="p-2.5 border">Code</th>
-                                    <th class="p-2.5 border">Item Name</th>
-                                    <th class="p-2.5 border">Unit</th>
-                                    <th class="p-2.5 border text-right">Dispatched Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${(() => {
-                                    let rowIndex = 0;
-                                    const rowsHtml = state.items.map(it => {
-                                        let totalQty = 0;
-                                        filteredOrders.forEach(ord => {
-                                            if (ord.quantities && ord.quantities[it.id]) {
-                                                totalQty += Number(ord.quantities[it.id]) || 0;
-                                            }
-                                        });
-                                        if (totalQty === 0) return '';
-                                        rowIndex++;
-                                        return `
-                                            <tr>
-                                                <td class="p-2.5 border text-slate-500 font-mono">${rowIndex}</td>
-                                                <td class="p-2.5 border font-mono">${escapeHtml(it.code)}</td>
-                                                <td class="p-2.5 border font-semibold">${escapeHtml(it.name)}</td>
-                                                <td class="p-2.5 border">${escapeHtml(it.unit)}</td>
-                                                <td class="p-2.5 border text-right font-bold">${totalQty}</td>
-                                            </tr>
-                                        `;
-                                    }).join('');
-                                    return rowsHtml || `<tr><td colspan="5" class="p-6 text-center text-slate-400">No items scheduled for dispatch on this date/branch.</td></tr>`;
-                                })()}
-                            </tbody>
-                        </table>
-
-                        <div class="pt-10 grid grid-cols-3 gap-6 text-center text-xs text-slate-600">
-                            <div class="border-t border-slate-400 pt-2">Prepared By</div>
-                            <div class="border-t border-slate-400 pt-2">Driver / Dispatch Officer</div>
-                            <div class="border-t border-slate-400 pt-2">Received By (Branch Stamp)</div>
-                        </div>
+                    <div id="printable-challan" class="space-y-6">
+                        ${branchesToRender.length === 0
+                            ? `<div class="bg-white rounded-2xl shadow-sm border p-10 text-center text-slate-400 font-medium">No branches selected for Delivery Challan.</div>`
+                            : branchesToRender.map((br, idx) => buildBranchChallanCard(br, dateOrders, s, idx, branchesToRender.length)).join('')
+                        }
                     </div>
                 </div>
             `;
 
-            if(document.getElementById('challan-branch')) document.getElementById('challan-branch').onchange = e => {
-                challanBranchId = e.target.value;
-                renderDeliveryChallanView(container);
-            };
-            if(document.getElementById('challan-date')) document.getElementById('challan-date').onchange = e => {
-                challanDate = e.target.value;
-                renderDeliveryChallanView(container);
-            };
+            if (document.getElementById('challan-date')) {
+                document.getElementById('challan-date').onchange = e => {
+                    challanDate = e.target.value;
+                    renderDeliveryChallanView(container);
+                };
+            }
         }
+
+        window.onChallanBranchToggle = function(branchId, checked) {
+            if (checked) {
+                if (!challanSelectedBranchIds.includes(branchId)) {
+                    challanSelectedBranchIds.push(branchId);
+                }
+            } else {
+                challanSelectedBranchIds = challanSelectedBranchIds.filter(id => id !== branchId);
+            }
+            renderDeliveryChallanView(document.getElementById('main-content'));
+        };
+
+        window.toggleAllChallanBranches = function(selectAll) {
+            challanSelectedBranchIds = selectAll ? state.branches.map(b => b.id) : [];
+            renderDeliveryChallanView(document.getElementById('main-content'));
+        };
+
+        window.printChallansOneAfterAnother = function() {
+            const branchesToRender = challanSelectedBranchIds.length > 0
+                ? state.branches.filter(b => challanSelectedBranchIds.includes(b.id))
+                : state.branches;
+
+            if (branchesToRender.length === 0) {
+                return showToast('Please select at least one branch to print.', 'warning');
+            }
+
+            showToast(`Preparing ${branchesToRender.length} branch challan(s) for sequential printing...`, 'info');
+            setTimeout(() => {
+                window.print();
+            }, 150);
+        };
 
         // ==================== 5. CATEGORIES & ITEM MASTER ====================
         let itemMasterFilterCatId = '';
@@ -1292,7 +1464,6 @@
 
             container.innerHTML = `
                 <div class="max-w-5xl mx-auto space-y-6">
-                    <!-- Categories Table -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div>
@@ -1300,11 +1471,13 @@
                                 <p class="text-xs text-slate-500">Excel Format: [Sr, Category Name] or [Category Name]</p>
                             </div>
                             <div class="flex gap-2">
-                                <button onclick="openCategoryModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Category</button>
-                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer">
-                                    Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'categories')">
+                                <button onclick="openCategoryModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
+                                    <i data-lucide="folder-plus" class="w-4 h-4"></i> Add Category
+                                </button>
+                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer flex items-center gap-1.5 transition">
+                                    <i data-lucide="upload" class="w-4 h-4"></i> Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'categories')">
                                 </label>
-                                ${state.categories.length > 0 ? `<button onclick="clearCollection('categories')" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold rounded-xl text-sm">Clear All</button>` : ''}
+                                ${state.categories.length > 0 ? `<button onclick="clearCollection('categories')" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold rounded-xl text-sm flex items-center gap-1.5 transition"><i data-lucide="trash-2" class="w-4 h-4"></i> Clear All</button>` : ''}
                             </div>
                         </div>
                         <table class="w-full text-left text-sm border">
@@ -1325,7 +1498,6 @@
                         </table>
                     </div>
 
-                    <!-- Items Table -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b">
                             <div class="flex items-center gap-3">
@@ -1339,15 +1511,16 @@
                                 </select>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
-                                <button onclick="refreshItemMasterView()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm" title="Clear and Reset View">
+                                <button onclick="refreshItemMasterView()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition" title="Clear and Reset View">
                                     <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Refresh
                                 </button>
-                                <button onclick="deleteSelectedItems()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
+                                <button onclick="deleteSelectedItems()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Selected
                                 </button>
-                                <button onclick="openItemModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Item</button>
+                                <button onclick="openItemModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5 transition">
+                                    <i data-lucide="plus" class="w-4 h-4"></i> Add Item
+                                </button>
                                 
-                                <!-- Import Button: Disabled if import already completed for this active category session -->
                                 <label class="px-4 py-2 ${importCompletedForCategory ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-65' : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-sm'} font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
                                     <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> ${importCompletedForCategory ? 'Imported (Locked)' : 'Import Excel'}
                                     <input type="file" accept=".xlsx, .xls, .csv" ${importCompletedForCategory ? 'disabled' : ''} class="hidden" onchange="importExcelData(event, 'items')">
@@ -1355,7 +1528,6 @@
                             </div>
                         </div>
 
-                        <!-- Active Category & Import Banner -->
                         <div class="flex items-center justify-between bg-blue-50/70 p-3 rounded-xl border border-blue-100 text-xs">
                             <span class="font-bold text-blue-900 flex items-center gap-1.5">
                                 <i data-lucide="info" class="w-4 h-4 text-blue-600"></i> Active Category & Import Target: <span class="text-blue-700 font-extrabold text-sm underline">${escapeHtml(currentCatName)}</span>
@@ -1407,7 +1579,7 @@
 
         window.onCategoryDropdownChange = function(newCatId) {
             itemMasterFilterCatId = newCatId;
-            importCompletedForCategory = false; // Reset lock when switching category
+            importCompletedForCategory = false;
             renderMasterItemsView(document.getElementById('main-content'));
             const selectedCat = state.categories.find(c => c.id === newCatId);
             showToast(`Switched to category: ${selectedCat ? selectedCat.name : ''}. Import unlocked.`, 'info');
@@ -1527,9 +1699,11 @@
                                 <button onclick="deleteSelectedBranches()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Selected
                                 </button>
-                                <button onclick="openBranchModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Branch</button>
-                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer">
-                                    Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'branches')">
+                                <button onclick="openBranchModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5">
+                                    <i data-lucide="plus" class="w-4 h-4"></i> Add Branch
+                                </button>
+                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer flex items-center gap-1.5">
+                                    <i data-lucide="upload" class="w-4 h-4"></i> Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'branches')">
                                 </label>
                                 ${state.branches.length > 0 ? `<button onclick="clearCollection('branches')" class="px-3 py-2 bg-rose-50 text-rose-600 font-semibold rounded-xl text-sm">Clear All</button>` : ''}
                             </div>
@@ -1574,9 +1748,11 @@
                                 <button onclick="deleteSelectedDestinations()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Selected
                                 </button>
-                                <button onclick="openDestinationModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add Destination</button>
-                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer">
-                                    Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'destinations')">
+                                <button onclick="openDestinationModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5">
+                                    <i data-lucide="plus" class="w-4 h-4"></i> Add Destination
+                                </button>
+                                <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm cursor-pointer flex items-center gap-1.5">
+                                    <i data-lucide="upload" class="w-4 h-4"></i> Import Excel <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelData(event, 'destinations')">
                                 </label>
                                 ${state.destinations.length > 0 ? `<button onclick="clearCollection('destinations')" class="px-3 py-2 bg-rose-50 text-rose-600 font-semibold rounded-xl text-sm">Clear All</button>` : ''}
                             </div>
@@ -1713,7 +1889,9 @@
                             <h3 class="font-bold text-lg">User Accounts & Role Permissions</h3>
                             <p class="text-xs text-slate-500">Passwords are encrypted with SHA-256 before saving to Firestore</p>
                         </div>
-                        <button onclick="openUserModal()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl text-sm">Add New User</button>
+                        <button onclick="openUserModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm flex items-center gap-1.5">
+                            <i data-lucide="user-plus" class="w-4 h-4"></i> Add New User
+                        </button>
                     </div>
                     <table class="w-full text-left text-sm border">
                         <thead><tr class="bg-slate-100 font-bold text-xs"><th class="p-3 border">Username</th><th class="p-3 border">Full Name</th><th class="p-3 border">Role / Permission</th><th class="p-3 border">Assigned Branch / Dest</th><th class="p-3 border text-right">Actions</th></tr></thead>
@@ -2031,7 +2209,7 @@
                     event.target.value = '';
                     if (count > 0) {
                         if (colName === 'items') {
-                            importCompletedForCategory = true; // Lock import button for this category session until refresh or category change
+                            importCompletedForCategory = true;
                         }
                         showToast(`Successfully imported ${count} records into the selected category!`, 'success');
                     } else {
